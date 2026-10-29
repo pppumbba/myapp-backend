@@ -13,7 +13,7 @@ use App\Models\WfmTransition;
 use App\Support\Access;
 use App\Support\Criteria;
 use App\Support\Notifier;
-use App\Support\SessionValues;
+use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -34,8 +34,13 @@ class WorkflowController extends Controller
         Access::require($request->user(), $meta, 'view');
         $this->workflow($meta);
 
+        $statuses = WfmStatus::where('workflow_meta_id', $meta->id)->orderBy('id')->get();
+        if ($request->boolean('translated')) {
+            Translations::apply($statuses, 'wfm_status');
+        }
+
         return response()->json([
-            'statuses' => WfmStatus::where('workflow_meta_id', $meta->id)->orderBy('id')->get(),
+            'statuses' => $statuses,
             'transitions' => WfmTransition::where('workflow_meta_id', $meta->id)->orderBy('id')->get(),
             'layout' => $meta->json_config['layout'] ?? (object) [],
         ]);
@@ -228,8 +233,8 @@ class WorkflowController extends Controller
         $table = trim((string) $meta->table_name);
         abort_if($table === '', 422, 'Set the table this workflow\'s records live in (the workflow meta\'s table).');
         abort_if(in_array(strtolower($table), MetaDataController::BLOCKED_TABLES, true), 422, 'This table cannot be used by a workflow.');
-        abort_unless(Schema::hasTable($table), 422, "The table \"{$table}\" does not exist.");
-        abort_unless(Schema::hasColumn($table, 'status_id'), 422, "The table \"{$table}\" needs a status_id column for this workflow.");
+        abort_unless(Schema::hasTable($table), 422, __('The table ":table" does not exist.', ['table' => $table]));
+        abort_unless(Schema::hasColumn($table, 'status_id'), 422, __('The table ":table" needs a status_id column for this workflow.', ['table' => $table]));
 
         return $table;
     }
@@ -291,13 +296,7 @@ class WorkflowController extends Controller
         if (! Access::canEnter($user, $t->next_status_id)) {
             return [false, 'Your role cannot move records into this status.'];
         }
-        $vars = (array) $row + [
-            'sessionUserId' => $user?->id,
-            'sessionUserName' => $user?->name,
-            'sessionUserEmail' => $user?->email,
-            'today' => now()->toDateString(),
-            'now' => now()->toDateTimeString(),
-        ] + SessionValues::for($user);
+        $vars = (array) $row + Criteria::userVars($user);
         try {
             return Criteria::passes($t->criteria, $vars) ? [true, null] : [false, "Needs: {$t->criteria}"];
         } catch (InvalidArgumentException $e) {
@@ -338,7 +337,7 @@ class WorkflowController extends Controller
         try {
             Criteria::check($data['criteria'] ?? null);
         } catch (InvalidArgumentException $e) {
-            abort(response()->json(['message' => 'The given data was invalid.', 'errors' => ['criteria' => [$e->getMessage()]]], 422));
+            abort(response()->json(['message' => __('The given data was invalid.'), 'errors' => ['criteria' => [$e->getMessage()]]], 422));
         }
 
         return $data;

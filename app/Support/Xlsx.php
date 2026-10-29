@@ -184,6 +184,38 @@ class Xlsx
     }
 
     /** Where the wanted sheet lives inside the zip. */
+    /**
+     * The workbook's sheet names, in order; a CSV file has one, "CSV".
+     *
+     * @return list<string>
+     */
+    public static function sheets(string $path, ?string $extension = null): array
+    {
+        if (strtolower($extension ?? pathinfo($path, PATHINFO_EXTENSION)) === 'csv') {
+            return ['CSV'];
+        }
+
+        $zip = new ZipArchive;
+        if ($zip->open($path) !== true) {
+            throw new RuntimeException('This is not an Excel (.xlsx) file.');
+        }
+
+        try {
+            $workbook = $zip->getFromName('xl/workbook.xml');
+            if ($workbook === false) {
+                throw new RuntimeException('This is not an Excel (.xlsx) file.');
+            }
+            $names = [];
+            foreach (self::xml($workbook)->sheets->sheet as $s) {
+                $names[] = (string) $s['name'];
+            }
+
+            return $names;
+        } finally {
+            $zip->close();
+        }
+    }
+
     private static function sheetPath(ZipArchive $zip, string|int|null $sheet): string
     {
         $workbook = $zip->getFromName('xl/workbook.xml');

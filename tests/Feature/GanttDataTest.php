@@ -18,7 +18,7 @@ class GanttDataTest extends TestCase
     {
         parent::setUp();
         $this->seed(GanttDemoSeeder::class);
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
     }
 
     public function test_timeline_lists_tasks_overlapping_the_window(): void

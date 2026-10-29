@@ -59,7 +59,7 @@ class EamDemoSeeder extends Seeder
 
     private const LEVELS = ['low', 'medium', 'high', 'critical'];
 
-    private const LOCATION_KINDS = ['site', 'building', 'floor', 'room', 'yard', 'warehouse'];
+    private const LOCATION_KINDS = ['site', 'building', 'floor', 'room', 'rack', 'yard', 'warehouse'];
 
     private const WO_TYPES = ['corrective', 'preventive', 'inspection', 'calibration'];
 
@@ -90,21 +90,24 @@ class EamDemoSeeder extends Seeder
         $options = fn (array $list, string $default) => ['render_type' => 'select', 'default_value' => $default, 'json_config' => ['options' => $list]];
 
         // Setup: where assets are and what kinds there are.
+        // Locations sit inside each other (a room in a building on a site): the grid is a tree (is_parent).
         $locationForm = $this->meta('eam_location_form', 'Location form', 'form', 'eam_locations', 'A site, building, room or yard assets can be in.');
+        $locationGrid = $this->meta('eam_locations_grid', 'Locations', 'datagrid', 'eam_locations', 'Where assets can be.');
         $this->params($locationForm, [
             ['id', 'ID', 'integer', $key],
             ['code', 'Code', 'string', ['is_required' => true, 'is_unique' => true]],
             ['name', 'Name', 'string', ['is_required' => true, 'is_label' => true]],
             ['kind', 'Kind', 'string', ['is_required' => true] + $options(self::LOCATION_KINDS, 'building')],
+            ['parent_id', 'Inside', 'integer', ['is_select' => true, 'ref_meta_id' => $locationGrid->id, 'render_type' => 'lookup', 'display_field' => 'name']],
             ['address', 'Address', 'string'],
         ]);
-        $locationGrid = $this->meta('eam_locations_grid', 'Locations', 'datagrid', 'eam_locations', 'Where assets can be.');
         $this->actions($locationGrid, $locationForm);
         $this->params($locationGrid, [
             ['id', 'ID', 'integer', $key],
-            ['code', 'Code', 'string', ['is_criteria' => true]],
             ['name', 'Name', 'string', ['is_criteria' => true, 'is_label' => true]],
+            ['code', 'Code', 'string', ['is_criteria' => true]],
             ['kind', 'Kind', 'string', ['is_criteria' => true]],
+            ['parent_id', 'Inside', 'integer', ['is_parent' => true, 'is_show' => false]],
             ['address', 'Address', 'string'],
         ]);
 
@@ -621,14 +624,19 @@ class EamDemoSeeder extends Seeder
         $at = fn (int $n, string $time) => $today->copy()->addDays($n)->setTimeFromTimeString($time)->toDateTimeString();
 
         $locations = [];
+        // Each inside the one before it that it names (null: at the top): the campus goes five deep, down to its racks.
         foreach ([
-            ['HQ', 'Head office', 'building', 'Peace Avenue 17, Ulaanbaatar'],
-            ['HQ-DC', 'HQ server room', 'room', 'Head office, floor 2'],
-            ['PLT-1', 'Plant 1', 'site', 'Industrial zone, Khan-Uul'],
-            ['WH-1', 'Central warehouse', 'warehouse', 'Industrial zone, Khan-Uul'],
-            ['YRD', 'Vehicle yard', 'yard', 'Industrial zone, Khan-Uul'],
-        ] as [$code, $name, $kind, $address]) {
-            $locations[$code] = DB::table('eam_locations')->insertGetId($stamp(['code' => $code, 'name' => $name, 'kind' => $kind, 'address' => $address]));
+            ['UB-C', 'Ulaanbaatar campus', 'site', 'Peace Avenue, Ulaanbaatar', null],
+            ['HQ', 'Head office', 'building', 'Peace Avenue 17, Ulaanbaatar', 'UB-C'],
+            ['HQ-F2', 'Head office, floor 2', 'floor', 'Head office, floor 2', 'HQ'],
+            ['HQ-DC', 'HQ server room', 'room', 'Head office, floor 2', 'HQ-F2'],
+            ['HQ-DC-R1', 'Server rack 1', 'rack', 'HQ server room, row A', 'HQ-DC'],
+            ['HQ-DC-R2', 'Server rack 2', 'rack', 'HQ server room, row A', 'HQ-DC'],
+            ['PLT-1', 'Plant 1', 'site', 'Industrial zone, Khan-Uul', null],
+            ['WH-1', 'Central warehouse', 'warehouse', 'Industrial zone, Khan-Uul', 'PLT-1'],
+            ['YRD', 'Vehicle yard', 'yard', 'Industrial zone, Khan-Uul', 'PLT-1'],
+        ] as [$code, $name, $kind, $address, $inside]) {
+            $locations[$code] = DB::table('eam_locations')->insertGetId($stamp(['code' => $code, 'name' => $name, 'kind' => $kind, 'address' => $address, 'parent_id' => $inside ? $locations[$inside] : null]));
         }
 
         $categories = [];

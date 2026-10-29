@@ -18,7 +18,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * A lookup (is_select with ref_meta_id) stores its record's value_field (id by default) and
  * shows its display_field (by default the looked-up meta's is_label field, else name).
- * is_label marks the field that names a meta's records. Links to other metas inside
+ * is_label marks the field that names a meta's records; is_parent the field holding the id of
+ * a record's parent in the same table, so a grid shows them as a tree. Links to other metas inside
  * json_config live in meta_meta_map (see MetaConfig).
  */
 class MetaParam extends Model
@@ -57,6 +58,7 @@ class MetaParam extends Model
         'display_field',
         'value_field',
         'is_label',
+        'is_parent',
     ];
 
     /** Links show inside json_config, as the screens read them. */
@@ -79,6 +81,7 @@ class MetaParam extends Model
         'is_select' => 'boolean',
         'is_mandatory_criteria' => 'boolean',
         'is_label' => 'boolean',
+        'is_parent' => 'boolean',
         'json_config' => MetaConfig::class,
     ];
 
@@ -119,6 +122,12 @@ class MetaParam extends Model
     }
 
     /** The looked-up record's column a lookup stores: value_field, else id. */
+    /** What people call this field: its label, else its name. */
+    public function label(): string
+    {
+        return $this->label_name ?: ($this->param_name ?: $this->field_path);
+    }
+
     public function valueField(): string
     {
         return $this->value_field ?: 'id';

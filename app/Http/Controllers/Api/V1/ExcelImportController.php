@@ -37,7 +37,7 @@ class ExcelImportController extends Controller
      */
     public function store(Request $request, Meta $meta): JsonResponse
     {
-        $import = new ExcelImport($this->importMeta($meta));
+        $import = new ExcelImport($this->importMeta($meta), $request->user());
         $mode = $import->mode();
         if ($mode !== 'update') {
             Access::require($request->user(), $meta, 'create');

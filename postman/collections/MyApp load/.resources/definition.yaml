@@ -1,0 +1,19 @@
+$kind: collection
+name: MyApp load
+description: |-
+  Read-only workload for load testing: what a signed-in user's browser asks for when opening a grid.
+  Run with a data file that has `token` (a Sanctum token) and `meta_id` (a datagrid meta) columns;
+  the token is never stored here.
+variables:
+  - key: base_url
+    value: 'http://myapp-backend.test/api'
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{token}}'
+scripts:
+  - type: http:afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', () => pm.response.to.have.status(200));

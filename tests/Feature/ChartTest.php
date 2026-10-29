@@ -107,8 +107,8 @@ class ChartTest extends TestCase
 
     public function test_only_admins_preview_or_list_columns(): void
     {
-        Sanctum::actingAs(User::factory()->create());
         $chart = $this->metaId('proc_chart_spend');
+        Sanctum::actingAs($this->allow(User::factory()->create(), [$chart]));
 
         $this->getJson("/api/metas/{$chart}/chart")->assertOk();
         $this->postJson("/api/metas/{$chart}/chart/preview", ['config' => []])->assertForbidden();

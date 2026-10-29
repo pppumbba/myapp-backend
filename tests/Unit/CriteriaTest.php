@@ -21,6 +21,21 @@ class CriteriaTest extends TestCase
         $this->assertTrue(Criteria::passes('', $this->vars));
     }
 
+    public function test_a_list_like_role_id_matches_when_it_holds_the_value(): void
+    {
+        $vars = ['roleId' => [1, 4], 'supplier_type_id' => '3'];
+
+        $this->assertTrue(Criteria::passes('roleId == 4', $vars));
+        $this->assertTrue(Criteria::passes('4 == roleId', $vars));
+        $this->assertFalse(Criteria::passes('roleId == 2', $vars));
+        $this->assertTrue(Criteria::passes('roleId != 2', $vars));
+        $this->assertTrue(Criteria::passes('roleId == 2 || supplierTypeId == 3', $vars));
+        $this->assertFalse(Criteria::passes('roleId == 1 && supplierTypeId == 2', ['roleId' => []] + $vars));
+
+        $this->expectExceptionMessage('only be compared with == or !=');
+        Criteria::passes('roleId > 1', $vars);
+    }
+
     public function test_unknown_names_and_bad_syntax_say_what_is_wrong(): void
     {
         foreach (['amount > 5' => 'amount', 'totalAmount >' => 'ends too early', "status == 'draft" => 'closing quote', 'a ; b' => ';'] as $expr => $hint) {

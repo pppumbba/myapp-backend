@@ -1,0 +1,8 @@
+$kind: http-request
+name: user access
+method: GET
+url: '{{base_url}}/user/access'
+order: 2000
+headers:
+  - key: Accept
+    value: application/json

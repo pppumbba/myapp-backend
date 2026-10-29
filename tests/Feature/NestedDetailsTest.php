@@ -61,7 +61,7 @@ class NestedDetailsTest extends TestCase
         $this->getJson("/api/metas/{$this->form}/data/{$id}")->assertOk()
             ->assertJsonCount(6, 'lines')
             ->assertJsonPath('lines.5.deliveries.0.quantity', fn ($v) => (float) $v === 1.0);
-        $deliveryQueries = collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'proc_order_line_deliveries'));
+        $deliveryQueries = collect(DB::getQueryLog())->filter(fn ($q) => preg_match('/from ["`]?proc_order_line_deliveries/', $q['query']));
 
         $this->assertCount(1, $deliveryQueries);
     }

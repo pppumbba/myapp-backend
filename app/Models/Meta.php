@@ -21,7 +21,7 @@ class Meta extends Model
     protected $table = 'metas';
 
     protected $fillable = [
-        'code', 'name', 'label_name', 'is_active', 'created_by', 'updated_by',
+        'code', 'name', 'label_name', 'is_active', 'is_log', 'is_public', 'created_by', 'updated_by',
         'ref_meta_id', 'description', 'table_name', 'query_string',
         'json_config', 'type_id', 'widget_id',
         // A form's scripts: on load, on change, before and after save, and shared variables and functions.
@@ -40,6 +40,8 @@ class Meta extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_log' => 'boolean',
+        'is_public' => 'boolean',
         'json_config' => MetaConfig::class,
     ];
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Schedule as ScheduleModel;
+use App\Support\Contents;
 use App\Support\ScheduledForms;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -37,3 +38,10 @@ Artisan::command('forms:run-scheduled {code? : Run this schedule now, due or not
 })->purpose('Run the scheduled forms that are due');
 
 Schedule::command('forms:run-scheduled')->everyMinute()->withoutOverlapping();
+
+/** Deletes uploads that no record holds, a day after they came: forms closed without saving. */
+Artisan::command('contents:prune', function () {
+    $this->info(Contents::pruneStale().' unattached files deleted.');
+})->purpose('Delete uploads never saved to a record');
+
+Schedule::command('contents:prune')->daily();

@@ -15,7 +15,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call([MetaTypeSeeder::class, WidgetSeeder::class, ProcurementDemoSeeder::class, CalendarDemoSeeder::class, GanttDemoSeeder::class, LmsDemoSeeder::class, TenderDemoSeeder::class, EamDemoSeeder::class]);
+        $this->call([MetaTypeSeeder::class, LanguageSeeder::class, ThemeSeeder::class, WidgetSeeder::class, ProcurementDemoSeeder::class, CalendarDemoSeeder::class, GanttDemoSeeder::class, LmsDemoSeeder::class, TenderDemoSeeder::class, EamDemoSeeder::class]);
 
         // User::factory(10)->create();
 
@@ -23,5 +23,9 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        // Published as the administrator above.
+        $this->call(WebsiteDemoSeeder::class);
+        $this->call(ClimbingDemoSeeder::class);
     }
 }

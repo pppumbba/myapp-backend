@@ -1,0 +1,16 @@
+$kind: collection
+name: MyApp save load
+description: |-
+  Write workload for load testing: create a room (cal_room_form, meta 17), change it, read it back.
+  It adds rows to cal_rooms, so run it only against a throwaway copy of the database.
+  Run with a data file that has a `token` column (a Sanctum token); the token is never stored here.
+variables:
+  - key: base_url
+    value: 'http://myapp-backend.test/api'
+  - key: room_form
+    value: '17'
+auth:
+  type: bearer
+  credentials:
+    - key: token
+      value: '{{token}}'

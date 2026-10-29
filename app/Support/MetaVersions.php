@@ -41,7 +41,7 @@ class MetaVersions
      *
      * @return array<string, array{table: string, scope: Closure(Builder, int): Builder, self: list<string>, refs: array<string, array{0: string, 1: bool}>}>
      */
-    private static function parts(): array
+    public static function parts(): array
     {
         $own = fn (string $column) => fn (Builder $q, int $id) => $q->where($column, $id);
 
@@ -70,6 +70,8 @@ class MetaVersions
                 'meta_id' => ['metas', false], 'status_id' => ['wfm_status', false],
             ]],
             'tags' => ['table' => 'meta_tag_map', 'scope' => $own('meta_id'), 'self' => [], 'refs' => ['tag_id' => ['tags', true]]],
+            // Texts in other languages (see Translations); row_id points into the table named by table_name, so it is last.
+            'translations' => ['table' => 'translations', 'scope' => $own('meta_id'), 'self' => [], 'refs' => []],
         ];
     }
 
@@ -225,7 +227,7 @@ class MetaVersions
                 if (DB::table('metas')->where('id', $id)->exists()) {
                     DB::table('metas')->where('id', $id)->update($meta);
                 } else {
-                    abort_if(DB::table('metas')->where('code', $meta['code'])->exists(), 422, "Another meta has the code \"{$meta['code']}\" now, so this one cannot come back.");
+                    abort_if(DB::table('metas')->where('code', $meta['code'])->exists(), 422, __('Another meta has the code ":code" now, so this one cannot come back.', ['code' => $meta['code']]));
                     DB::table('metas')->insert($meta);
                 }
 
@@ -269,6 +271,8 @@ class MetaVersions
         } catch (QueryException $e) {
             abort(422, 'The database refused to restore this version: '.($e->errorInfo[2] ?? 'unknown error').'.');
         }
+
+        Translations::forget($version->meta_id);
 
         return ['saved_first' => $before?->version_no, 'warnings' => array_values(array_unique($warnings))];
     }
@@ -330,6 +334,7 @@ class MetaVersions
             'process_behaviours' => 'Value '.$row['source_path'].' → '.$row['target_path'],
             'links' => ucfirst($row['type']).' → '.$metaName($row['trg_meta_id']).($row['trg_path'] ? " ({$row['src_path']} → {$row['trg_path']})" : ''),
             'notification' => 'Watches '.($metaName($row['meta_id']) ?? 'nothing'),
+            'translations' => 'Translation ('.$row['locale'].') of '.$row['table_name'].' #'.$row['row_id'].' '.$row['field'],
             'tags' => 'Tag '.(DB::table('tags')->where('id', $row['tag_id'])->value('name') ?? "#{$row['tag_id']}"),
             default => "#{$row['id']}",
         };

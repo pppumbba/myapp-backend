@@ -20,7 +20,7 @@ class CalendarDataTest extends TestCase
     {
         parent::setUp();
         $this->seed(CalendarDemoSeeder::class);
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
         $this->calendar = Meta::where('code', 'cal_calendar')->value('id');
 
         DB::table('cal_events')->delete();

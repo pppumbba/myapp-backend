@@ -58,7 +58,7 @@ class WidgetController extends Controller
     {
         Access::requireAdmin($request->user());
         $used = $widget->metas()->count();
-        abort_if($used > 0, 422, "{$used} placed ".($used === 1 ? 'widget uses' : 'widgets use').' this. Remove them from their pages, or make this inactive instead.');
+        abort_if($used > 0, 422, trans_choice('{1} :count placed widget uses this. Remove it from its page, or make this inactive instead.|[2,*] :count placed widgets use this. Remove them from their pages, or make this inactive instead.', $used));
         DB::transaction(function () use ($widget) {
             // A composite's parts go with it: the template's own widget metas, then the template.
             if ($template = $widget->template) {

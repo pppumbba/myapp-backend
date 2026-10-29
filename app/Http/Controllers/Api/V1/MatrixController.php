@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Meta;
 use App\Support\Access;
+use App\Support\RecordLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -87,18 +88,34 @@ class MatrixController extends Controller
         $scope = array_intersect_key($this->scope($request), array_flip($existing));
         $now = array_intersect_key(['created_at' => now(), 'updated_at' => now()], array_flip($existing));
 
-        DB::transaction(function () use ($data, $rowIds, $columnIds, $table, $c, $scope, $now) {
+        // With the log on, each cell row with an id is logged with its value before and after.
+        $logged = RecordLog::enabled($meta) && in_array('id', $existing, true);
+        RecordLog::as('matrix', fn () => DB::transaction(function () use ($data, $rowIds, $columnIds, $table, $c, $scope, $now, $logged, $meta, $request) {
+            $log = [];
             foreach ($data['cells'] as $i => $cell) {
                 abort_unless(in_array((int) $cell['row'], $rowIds, true) && in_array((int) $cell['column'], $columnIds, true), 422, 'Value '.($i + 1).' is for a row or column that is not in this matrix.');
                 $value = $cell['value'] === '' ? null : $cell['value'];
                 $pair = [$c['row'] => (int) $cell['row'], $c['column'] => (int) $cell['column']];
-                if (DB::table($table)->where($pair)->exists()) {
+                $before = DB::table($table)->where($pair)->first();
+                if ($before) {
                     DB::table($table)->where($pair)->update([$c['value'] => $value] + array_diff_key($now, ['created_at' => 1]));
+                    if ($logged) {
+                        $log[] = [(int) $before->id, 'updated', (array) $before, [$c['value'] => $value] + (array) $before];
+                    }
                 } elseif ($value !== null) {
-                    DB::table($table)->insert($pair + [$c['value'] => $value] + $scope + $now);
+                    $row = $pair + [$c['value'] => $value] + $scope + $now;
+                    if ($logged) {
+                        $id = (int) DB::table($table)->insertGetId($row);
+                        $log[] = [$id, 'created', null, ['id' => $id] + $row];
+                    } else {
+                        DB::table($table)->insert($row);
+                    }
                 }
             }
-        });
+            if ($log) {
+                RecordLog::writeMany($meta, $table, $log, $request->user());
+            }
+        }));
 
         return $this->show($request, $meta);
     }
@@ -118,7 +135,7 @@ class MatrixController extends Controller
 
         $cell = (array) ($json['cell'] ?? []);
         foreach (['row', 'column', 'value'] as $part) {
-            abort_unless(is_string($cell[$part] ?? null) && Schema::hasColumn($table, $cell[$part]), 422, "This matrix's cell.{$part} must be a column of {$table}.");
+            abort_unless(is_string($cell[$part] ?? null) && Schema::hasColumn($table, $cell[$part]), 422, __('This matrix\'s cell.:part must be a column of :table.', ['part' => $part, 'table' => $table]));
         }
         $config = [
             'cell' => $cell + ['type' => in_array($cell['type'] ?? null, ['integer', 'string'], true) ? $cell['type'] : 'decimal'],
@@ -138,7 +155,7 @@ class MatrixController extends Controller
     private function side(Request $request, array $side, array $query, string $name, ?string $weight = null): array
     {
         $grid = Meta::find($side['meta_id'] ?? 0);
-        abort_unless($grid, 422, "This matrix's {$name} need a grid (meta_id).");
+        abort_unless($grid, 422, __('This matrix\'s :name need a grid (meta_id).', ['name' => $name]));
         Access::require($request->user(), $grid, 'view');
         $label = is_string($side['label'] ?? null) ? $side['label'] : 'name';
 

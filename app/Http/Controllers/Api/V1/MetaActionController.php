@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Meta;
 use App\Models\MetaAction;
 use App\Support\Access;
+use App\Support\GridReuse;
+use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,17 +16,25 @@ use Illuminate\Validation\ValidationException;
 /** The toolbar buttons of a datagrid (see MetaAction). */
 class MetaActionController extends Controller
 {
-    /** GET /metas/{meta}/actions */
+    /**
+     * GET /metas/{meta}/actions?effective=1
+     * With effective, a grid without buttons that reuses another gets the buttons of the
+     * nearest base that has some (GridReuse); without it, only its own, as the builder edits them.
+     */
     public function index(Request $request, Meta $meta): JsonResponse
     {
         Access::require($request->user(), $meta, 'view');
+        $grid = $request->boolean('effective') ? GridReuse::actionsOf($meta) : $meta;
 
-        return response()->json(
-            MetaAction::where('grid_meta_id', $meta->id)
-                ->with(['form:id,code,name', 'get:id,code,name'])
-                ->orderBy('order_number')->orderBy('id')
-                ->get()
-        );
+        $actions = MetaAction::where('grid_meta_id', $grid->id)
+            ->with(['form:id,code,name', 'get:id,code,name'])
+            ->orderBy('order_number')->orderBy('id')
+            ->get();
+        if ($request->boolean('translated')) {
+            Translations::apply($actions, 'meta_actions');
+        }
+
+        return response()->json($actions);
     }
 
     /** POST /metas/{meta}/actions */
@@ -71,7 +81,7 @@ class MetaActionController extends Controller
         }
         $type = Meta::with('type')->find($data['form_meta_id'] ?? null)?->type?->code;
         if ($type !== 'stage_query') {
-            throw ValidationException::withMessages(['form_meta_id' => 'Choose a stage query for this button.']);
+            throw ValidationException::withMessages(['form_meta_id' => __('Choose a stage query for this button.')]);
         }
     }
 
@@ -87,6 +97,7 @@ class MetaActionController extends Controller
             'form_meta_id' => [$req, 'integer', 'exists:metas,id'],
             'get_meta_id' => ['nullable', 'integer', 'exists:metas,id'],
             'needs_row' => ['sometimes', 'boolean'],
+            'show_in_toolbar' => ['sometimes', 'boolean'],
             'show_in_row' => ['sometimes', 'boolean'],
             'order_number' => ['sometimes', 'integer', 'min:1'],
             'json_config' => ['nullable', 'array'],

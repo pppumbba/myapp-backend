@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\Access;
+use App\Support\RoleLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -40,7 +41,14 @@ class UserController extends Controller
         $losesAdmin = $admin && $user->isAdmin() && ! in_array($admin->id, array_map('intval', $data['role_ids']), true);
         abort_if($losesAdmin && $admin->users()->count() <= 1, 422, 'There has to be at least one administrator.');
 
-        $user->roles()->sync($data['role_ids']);
+        $changes = $user->roles()->sync($data['role_ids']);
+        $user->forgetRoles();
+        foreach ($changes['attached'] as $roleId) {
+            RoleLog::users((int) $roleId, [$user->id], [], $request->user());
+        }
+        foreach ($changes['detached'] as $roleId) {
+            RoleLog::users((int) $roleId, [], [$user->id], $request->user());
+        }
 
         return response()->json($user->load('roles:id,code,name')->only(['id', 'name', 'email', 'roles']));
     }

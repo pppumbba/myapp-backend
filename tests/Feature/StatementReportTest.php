@@ -18,7 +18,7 @@ class StatementReportTest extends TestCase
     {
         parent::setUp();
         $this->seed(ProcurementDemoSeeder::class);
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
     }
 
     private function metaId(string $code): int

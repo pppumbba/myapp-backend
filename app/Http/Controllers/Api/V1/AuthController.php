@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Role;
 use App\Models\User;
 use App\Support\SessionValues;
 use Illuminate\Http\JsonResponse;
@@ -21,17 +20,11 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
-        $first = ! User::exists();
-        $user = User::create([
+        $user = User::startAccount([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
         ]);
-
-        // The very first account runs the place: it gets the admin role.
-        if ($first) {
-            $user->roles()->attach(Role::firstOrCreate(['code' => Role::ADMIN], ['name' => 'Administrator'])->id);
-        }
 
         return response()->json([
             'user' => $user,
@@ -49,7 +42,7 @@ class AuthController extends Controller
         $user = User::where('email', $data['email'])->first();
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
-            return response()->json(['message' => 'Invalid credentials.'], 401);
+            return response()->json(['message' => __('Invalid credentials.')], 401);
         }
 
         // Custom session values (e.g. sessionemployeeid) are worked out once per login.
@@ -66,6 +59,6 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
         SessionValues::forget($request->user());
 
-        return response()->json(['message' => 'Logged out.']);
+        return response()->json(['message' => __('Logged out.')]);
     }
 }

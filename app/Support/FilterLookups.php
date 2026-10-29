@@ -61,9 +61,11 @@ class FilterLookups
     private static function formOf(Meta $meta): ?int
     {
         $isForm = fn (?int $id) => $id && Meta::whereKey($id)->whereHas('type', fn ($q) => $q->where('code', 'form'))->exists();
-        $action = MetaAction::where('grid_meta_id', $meta->id)->whereIn('action', ['add', 'edit'])->whereNotNull('form_meta_id')
+        // A grid that reuses another enters its records with the buttons it uses (GridReuse).
+        $owner = $meta->type?->code === 'datagrid' ? GridReuse::actionsOf($meta) : $meta;
+        $action = MetaAction::where('grid_meta_id', $owner->id)->whereIn('action', ['add', 'edit'])->whereNotNull('form_meta_id')
             ->orderByRaw("CASE WHEN action = 'add' THEN 0 ELSE 1 END")->value('form_meta_id');
 
-        return $isForm($action) ? $action : ($isForm($meta->ref_meta_id) ? $meta->ref_meta_id : null);
+        return $isForm($action) ? $action : ($isForm($owner->ref_meta_id) ? $owner->ref_meta_id : null);
     }
 }

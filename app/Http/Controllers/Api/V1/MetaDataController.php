@@ -9,12 +9,18 @@ use App\Models\User;
 use App\Models\WfmStatus;
 use App\Support\Access;
 use App\Support\Autonumber;
+use App\Support\Contents;
+use App\Support\Criteria;
+use App\Support\Documents;
 use App\Support\ExternalService;
 use App\Support\FilterLookups;
+use App\Support\GridReuse;
 use App\Support\NamedSql;
 use App\Support\Notifier;
 use App\Support\ParamRules;
 use App\Support\ProcessFlow;
+use App\Support\QueryDesign;
+use App\Support\RecordLog;
 use App\Support\Xlsx;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\QueryException;
@@ -27,6 +33,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
 
@@ -75,7 +82,7 @@ class MetaDataController extends Controller
      */
     public function index(Request $request, Meta $meta): JsonResponse
     {
-        Access::require($request->user(), $meta, 'view');
+        Access::requireRecords($request->user(), $meta);
         $perPage = min(max((int) $request->query('per_page', 20), 1), 100);
         if (ExternalService::uses($meta)) {
             $sort = $request->query('sort');
@@ -90,19 +97,66 @@ class MetaDataController extends Controller
 
         [$query, $missing] = $this->filtered($request, $meta, $source);
         if ($missing->isNotEmpty()) {
-            return response()->json(['data' => [], 'current_page' => 1, 'last_page' => 1, 'per_page' => $perPage, 'total' => 0, 'missing_filters' => $missing]);
+            return response()->json(['data' => [], 'current_page' => 1, 'last_page' => 1, 'per_page' => $perPage, 'total' => 0, 'footer' => (object) [], 'missing_filters' => $missing]);
         }
+        // A tree (a param with is_parent): ?parent= lists one level, the top one when empty.
+        $parent = $this->parentField($source);
+        $tree = $parent !== null && $request->has('parent') ? clone $query : null;
+        if ($tree) {
+            $under = (string) $request->query('parent', '');
+            $under === '' ? $query->where(fn ($q) => $q->whereNull($parent)->orWhere($parent, '')) : $query->where($parent, $under);
+        }
+        // A grid's footer: its columns' json_config.aggregate over every matching row, not just this page.
+        $footer = $this->totals($tree ?? $query, $source);
 
         $sort = $request->query('sort');
         $dir = $request->query('dir') === 'desc' ? 'desc' : 'asc';
         if (is_string($sort) && in_array($sort, $source['columns'], true)) {
             $query->orderBy($sort, $dir);
-        } elseif (! $source['query'] || $source['params']->contains('field_path', $source['key'])) {
-            // A query's rows keep their own order unless the key is one of its columns.
-            $query->orderByDesc($source['key']);
+        } else {
+            $this->defaultOrder($query, $meta, $source);
         }
 
-        return response()->json($this->read(fn () => $query->paginate($perPage)));
+        $page = $this->read(fn () => $query->paginate($perPage))->toArray();
+        $page['data'] = $this->withFiles($meta, $page['data'], $source['key']);
+        if ($tree) {
+            $page['data'] = $this->withChildCounts($page['data'], $tree, $parent, $source['key']);
+        }
+
+        return response()->json($page + ['footer' => $footer]);
+    }
+
+    /** The field holding a record's parent record (is_parent), when the grid can read it. */
+    private function parentField(array $source): ?string
+    {
+        $field = $source['params']->firstWhere('is_parent', true)?->field_path;
+
+        return $field && in_array($field, $source['columns'], true) ? $field : null;
+    }
+
+    /** Each row with _children: how many records under the same filters have it as their parent. */
+    private function withChildCounts(array $rows, Builder $all, string $parent, string $key): array
+    {
+        $ids = array_values(array_filter(array_map(fn ($r) => data_get($r, $key), $rows), fn ($id) => $id !== null));
+        $counts = $ids ? $this->read(fn () => (clone $all)->reorder()->select($parent)->selectRaw('count(*) as n')
+            ->whereIn($parent, $ids)->groupBy($parent)->pluck('n', $parent)) : collect();
+
+        return array_map(function ($row) use ($counts, $key) {
+            $n = (int) ($counts[data_get($row, $key)] ?? 0);
+            is_array($row) ? $row['_children'] = $n : $row->_children = $n;
+
+            return $row;
+        }, $rows);
+    }
+
+    /** Rows with the files of the meta's singlefile, multifile and document fields (see Contents). */
+    private function withFiles(Meta $meta, array $rows, string $key = 'id'): array
+    {
+        // A grid reusing another shows the files of its origin's file fields too.
+        $origin = GridReuse::origin($meta);
+        $params = Contents::params($meta, true)->merge($origin === $meta ? [] : Contents::params($origin, true))->unique('field_path')->values();
+
+        return Contents::attach($origin->table_name, $params, $rows, $key);
     }
 
     /** A facet lists up to this many values, the most common first. */
@@ -119,14 +173,14 @@ class MetaDataController extends Controller
      */
     public function facets(Request $request, Meta $meta): JsonResponse
     {
-        Access::require($request->user(), $meta, 'view');
+        Access::requireRecords($request->user(), $meta);
         $source = $this->source($meta);
         $fields = array_values(array_filter((array) $request->query('fields', []), 'is_string'));
         $criteria = $source['params']->where('is_criteria', true)->pluck('field_path')->all();
 
         $facets = [];
         foreach (array_slice($fields, 0, 20) as $field) {
-            abort_unless(in_array($field, $criteria, true) && in_array($field, $source['columns'], true), 422, "\"{$field}\" is not a filter of this grid.");
+            abort_unless(in_array($field, $criteria, true) && in_array($field, $source['columns'], true), 422, __('":field" is not a filter of this grid.', ['field' => $field]));
             $others = array_diff_key((array) $request->query('filter', []), [$field => true]);
             [$query, $missing] = $this->filtered($request->duplicate(['filter' => $others] + $request->query()), $meta, $source);
             if ($missing->isNotEmpty()) {
@@ -156,7 +210,7 @@ class MetaDataController extends Controller
      */
     public function statement(Request $request, Meta $meta): JsonResponse
     {
-        Access::require($request->user(), $meta, 'view');
+        Access::requireRecords($request->user(), $meta);
         $meta->loadMissing('type');
         abort_unless($meta->type?->code === 'statement', 422, 'Only statement metas have statements.');
         $source = $this->source($meta);
@@ -169,11 +223,7 @@ class MetaDataController extends Controller
         $config = $meta->json_config ?? [];
         $groups = array_values(array_filter((array) ($config['group_by'] ?? []), fn ($c) => is_string($c) && in_array($c, $source['columns'], true)));
 
-        $aggregates = $source['params']
-            ->filter(fn (MetaParam $p) => in_array($p->json_config['aggregate'] ?? null, ['count', 'sum', 'avg', 'min', 'max'], true) && in_array($p->field_path, $source['columns'], true))
-            ->map(fn (MetaParam $p) => strtoupper($p->json_config['aggregate']).'('.$query->getGrammar()->wrap($p->field_path).') AS '.$query->getGrammar()->wrap($p->field_path))
-            ->values();
-        $totals = $aggregates->isEmpty() ? (object) [] : $this->read(fn () => DB::query()->fromSub(clone $query, 's')->selectRaw($aggregates->implode(', '))->first());
+        $totals = $this->totals($query, $source);
 
         $this->statementOrder($query, $groups, $config, $source);
         $rows = $this->read(fn () => $query->limit(self::STATEMENT_ROWS + 1)->get());
@@ -185,6 +235,37 @@ class MetaDataController extends Controller
             'truncated' => $rows->count() > self::STATEMENT_ROWS,
             'missing_filters' => [],
         ]);
+    }
+
+    /**
+     * Each param's json_config.aggregate (count, sum, avg, min or max) over every row the
+     * query matches, by field_path: a statement's grand totals, a grid's footer.
+     */
+    private function totals(Builder $query, array $source): object
+    {
+        $grammar = $query->getGrammar();
+        $aggregates = $source['params']
+            ->filter(fn (MetaParam $p) => in_array($p->json_config['aggregate'] ?? null, ['count', 'sum', 'avg', 'min', 'max'], true) && in_array($p->field_path, $source['columns'], true))
+            ->map(fn (MetaParam $p) => strtoupper($p->json_config['aggregate']).'('.$grammar->wrap($p->field_path).') AS '.$grammar->wrap($p->field_path))
+            ->values();
+
+        return $aggregates->isEmpty() ? (object) [] : $this->read(fn () => DB::query()->fromSub(clone $query, 's')->selectRaw($aggregates->implode(', '))->first());
+    }
+
+    /**
+     * The order rows take when none is picked: a query meta's own sort (QueryDesign), which a
+     * sub-query would lose; else the newest first, unless a query's rows have no key column.
+     */
+    private function defaultOrder(Builder $query, Meta $meta, array $source): void
+    {
+        $sorts = QueryDesign::defaultOrder(GridReuse::origin($meta), $source['columns']);
+        foreach ($sorts as [$column, $dir]) {
+            $query->orderBy($column, $dir);
+        }
+        if (! $sorts && (! $source['query'] || $source['params']->contains('field_path', $source['key']))) {
+            // A query's rows keep their own order unless the key is one of its columns.
+            $query->orderByDesc($source['key']);
+        }
     }
 
     /** A statement's order: its groups (outer first), then json_config.sort, then the key. */
@@ -214,12 +295,12 @@ class MetaDataController extends Controller
      */
     public function export(Request $request, Meta $meta): Response
     {
-        Access::require($request->user(), $meta, 'view');
+        Access::requireRecords($request->user(), $meta);
         $source = $this->source($meta);
         abort_if($meta->type?->code === 'report', 422, 'A report prints one record; print it instead.');
 
         [$query, $missing] = $this->filtered($request, $meta, $source);
-        abort_if($missing->isNotEmpty(), 422, 'Fill in '.$missing->implode(', ').' before exporting.');
+        abort_if($missing->isNotEmpty(), 422, __('Fill in :fields before exporting.', ['fields' => $missing->implode(', ')]));
 
         if ($meta->type?->code === 'statement') {
             $config = $meta->json_config ?? [];
@@ -229,8 +310,8 @@ class MetaDataController extends Controller
             $sort = $request->query('sort');
             if (is_string($sort) && in_array($sort, $source['columns'], true)) {
                 $query->orderBy($sort, $request->query('dir') === 'desc' ? 'desc' : 'asc');
-            } elseif (! $source['query'] || $source['params']->contains('field_path', $source['key'])) {
-                $query->orderByDesc($source['key']);
+            } else {
+                $this->defaultOrder($query, $meta, $source);
             }
         }
 
@@ -242,7 +323,8 @@ class MetaDataController extends Controller
             ->values();
 
         // A workflow's statuses read as their names; a grid that doesn't list status_id gets it last.
-        $statuses = $meta->ref_meta_id ? WfmStatus::where('workflow_meta_id', $meta->ref_meta_id)->pluck('name', 'id') : collect();
+        $workflowId = GridReuse::origin($meta)->ref_meta_id;
+        $statuses = $workflowId ? WfmStatus::where('workflow_meta_id', $workflowId)->pluck('name', 'id') : collect();
         $withStatus = $statuses->isNotEmpty() && in_array('status_id', $source['columns'], true) && ! $columns->contains('field_path', 'status_id');
 
         $names = $columns->mapWithKeys(fn (MetaParam $p) => [$p->field_path => $this->lookupNames($p, $rows)])->filter();
@@ -295,7 +377,7 @@ class MetaDataController extends Controller
      *
      * @return array<int|string, string>
      */
-    private function lookupNames(MetaParam $param, Collection $rows): array
+    public static function lookupNames(MetaParam $param, Collection $rows): array
     {
         if (! $param->is_select || ! $param->ref_meta_id || ! ($table = ParamRules::lookupTable($param))) {
             return [];
@@ -346,7 +428,7 @@ class MetaDataController extends Controller
             if (in_array($field, $tokens, true)) {
                 continue;
             }
-            abort_unless(in_array($field, $source['columns'], true), 422, "\"{$meta->name}\" has no column \"{$field}\" to keep it to one record.");
+            abort_unless(in_array($field, $source['columns'], true), 422, __('":name" has no column ":field" to keep it to one record.', ['name' => $meta->name, 'field' => $field]));
             $query->where($field, $value);
         }
 
@@ -436,7 +518,7 @@ class MetaDataController extends Controller
     /** GET /metas/{meta}/data/{id} */
     public function show(Request $request, Meta $meta, string $id): JsonResponse
     {
-        Access::require($request->user(), $meta, 'view');
+        Access::requireRecords($request->user(), $meta);
         if (ExternalService::uses($meta)) {
             return response()->json(ExternalService::find($meta, $request->user(), $id));
         }
@@ -446,7 +528,19 @@ class MetaDataController extends Controller
 
         abort_if(! $row, 404, 'Record not found.');
 
-        return response()->json($this->withDetails($row, $this->details($meta), $id));
+        return response()->json($this->withFiles($meta, [$this->withDetails($row, $this->details($meta), $id)], $source['key'])[0]);
+    }
+
+    /**
+     * One record with its lines, as this user may see it through this meta (GET
+     * /metas/{meta}/data/{id}), as plain arrays. Documents print from it.
+     */
+    public static function recordAs(?User $user, Meta $meta, string|int $id): array
+    {
+        $request = Request::create("/api/metas/{$meta->id}/data/{$id}", 'GET', server: ['HTTP_ACCEPT' => 'application/json']);
+        $request->setUserResolver(fn () => $user);
+
+        return app(self::class)->show($request, $meta, (string) $id)->getData(true);
     }
 
     /** POST /metas/{meta}/data, with each detail's lines under its field_path. */
@@ -458,22 +552,29 @@ class MetaDataController extends Controller
             return response()->json(ExternalService::create($meta, $request->user(), $request->all()), 201);
         }
         $source = $this->source($meta, true);
-        $details = $this->details($meta);
+        $all = $this->details($meta);
+        $details = $this->applicable($all, $request);
         [$data, $lines] = $this->validated($request, $source, $details);
+        $files = Contents::validated($meta, $source['table'], $request->all(), $request->user(), null);
         $data += $this->timestamps($source['table'], true);
 
         // The forms of its process flow save in the same transaction: one refusing undoes all.
-        [$id, $ran] = $this->write(fn () => DB::transaction(function () use ($source, $details, $data, $lines, $meta, $request) {
+        [$id, $ran] = RecordLog::saving(fn () => $this->write(fn () => DB::transaction(function () use ($source, $details, $all, $data, $lines, $files, $meta, $request) {
             $data = Autonumber::fill($source['table'], $source['params'], $data);
             $id = DB::table($source['table'])->insertGetId($data);
             $this->saveLines($source, $details, $lines, $id);
+            Contents::sync($meta, $source['table'], (int) $id, $files);
+            if (RecordLog::enabled($meta)) {
+                RecordLog::write($meta, $source['table'], (int) $id, 'created', null, $this->tree($source, $all, (int) $id), $all, $request->user());
+            }
             $record = DB::table($source['table'])->where($source['key'], $id)->first();
 
             return [$id, ProcessFlow::run($meta, $record, $request->user())];
-        }));
+        })));
         DB::afterCommit(fn () => Notifier::recordChanged($source['table'], 'created', (int) $id, $request->user()));
+        Documents::keepFor($meta, $source['table'], (int) $id, $request->user());
 
-        $row = $this->withDetails($this->find($source, $id), $details, $id);
+        $row = $this->withFiles($meta, [$this->withDetails($this->find($source, $id), $all, $id)], $source['key'])[0];
         if ($ran) {
             $row->_processes = $ran;
         }
@@ -510,10 +611,10 @@ class MetaDataController extends Controller
             $request->setUserResolver(fn () => $user);
             $data = app(self::class)->index($request, $meta)->getData(true);
             if (! empty($data['missing_filters'])) {
-                abort(422, "\"{$meta->name}\" needs these filters filled in: ".implode(', ', $data['missing_filters']).'.');
+                abort(422, __('":name" needs these filters filled in: :filters.', ['name' => $meta->name, 'filters' => implode(', ', $data['missing_filters'])]));
             }
             array_push($rows, ...$data['data']);
-            abort_if(count($rows) > $max, 422, "\"{$meta->name}\" has more than ".number_format($max).' rows.');
+            abort_if(count($rows) > $max, 422, __('":name" has more than :max rows.', ['name' => $meta->name, 'max' => number_format($max)]));
         } while ($page++ < ($data['last_page'] ?? 1));
 
         return $rows;
@@ -542,18 +643,26 @@ class MetaDataController extends Controller
         $source = $this->source($meta, true);
         abort_unless($this->withoutHidden(DB::table($source['table'])->where($source['key'], $id), $source, $request)->exists(), 404, 'Record not found.');
 
-        $details = $this->details($meta);
-        [$data, $lines] = $this->validated($request, $source, $details, $id);
-        $data += $this->timestamps($source['table'], false);
         $before = DB::table($source['table'])->where($source['key'], $id)->first();
+        $all = $this->details($meta);
+        $details = $this->applicable($all, $request, $before);
+        [$data, $lines] = $this->validated($request, $source, $details, $id);
+        $files = Contents::validated($meta, $source['table'], $request->all(), $request->user(), $id);
+        $data += $this->timestamps($source['table'], false);
 
-        $this->write(fn () => DB::transaction(function () use ($source, $details, $data, $lines, $id) {
+        $logged = RecordLog::enabled($meta) ? $this->tree($source, $all, $id) : null;
+        RecordLog::saving(fn () => $this->write(fn () => DB::transaction(function () use ($source, $details, $all, $data, $lines, $files, $id, $meta, $logged, $request) {
             DB::table($source['table'])->where($source['key'], $id)->update($data);
             $this->saveLines($source, $details, $lines, $id);
-        }));
+            Contents::sync($meta, $source['table'], $id, $files);
+            if ($logged !== null) {
+                RecordLog::write($meta, $source['table'], $id, 'updated', $logged, $this->tree($source, $all, $id), $all, $request->user());
+            }
+        })));
         Notifier::recordChanged($source['table'], 'updated', $id, $request->user(), $before);
+        Documents::keepFor($meta, $source['table'], $id, $request->user());
 
-        return response()->json($this->withDetails($this->find($source, $id), $details, $id));
+        return response()->json($this->withFiles($meta, [$this->withDetails($this->find($source, $id), $all, $id)], $source['key'])[0]);
     }
 
     /** DELETE /metas/{meta}/data/{id}. Its detail lines go with it. */
@@ -571,13 +680,21 @@ class MetaDataController extends Controller
         abort_unless($this->withoutHidden(DB::table($source['table'])->where($source['key'], $id), $source, $request)->exists(), 404, 'Record not found.');
         $details = $this->details($meta);
         $before = DB::table($source['table'])->where($source['key'], $id)->first();
-        $deleted = $this->write(fn () => DB::transaction(function () use ($source, $details, $id) {
+        $logged = RecordLog::enabled($meta) ? $this->tree($source, $details, $id) : null;
+        $deleted = RecordLog::saving(fn () => $this->write(fn () => DB::transaction(function () use ($source, $details, $id, $meta, $logged, $request) {
             foreach ($details as $detail) {
                 $this->deleteLines($detail, DB::table($detail['source']['table'])->where($detail['foreign_key'], $id)->pluck($detail['source']['key'])->all());
             }
+            $deleted = DB::table($source['table'])->where($source['key'], $id)->delete();
+            if ($deleted) {
+                Contents::forget($source['table'], $id);
+            }
+            if ($deleted && $logged !== null) {
+                RecordLog::write($meta, $source['table'], $id, 'deleted', $logged, null, $details, $request->user());
+            }
 
-            return DB::table($source['table'])->where($source['key'], $id)->delete();
-        }));
+            return $deleted;
+        })));
 
         abort_if(! $deleted, 404, 'Record not found.');
         Notifier::recordChanged($source['table'], 'deleted', $id, $request->user(), $before);
@@ -600,6 +717,12 @@ class MetaDataController extends Controller
         return $query;
     }
 
+    /** A record with all its lines, as plain arrays, for the change log. */
+    private function tree(array $source, array $details, int $id): array
+    {
+        return json_decode(json_encode($this->withDetails($this->find($source, $id), $details, $id)), true);
+    }
+
     private function find(array $source, int $id): object
     {
         return DB::table($source['table'])->select($source['columns'])->where($source['key'], $id)->first();
@@ -612,11 +735,14 @@ class MetaDataController extends Controller
      * A form's detail params: data_type "detail", ref_meta_id = the form describing one line,
      * json_config.foreign_key = the line column pointing back at this record. Optionally
      * json_config.amount = [column, column] multiplied per line and summed into total_field.
+     * json_config.one = true makes it one-to-one: at most one record points back, and it is
+     * sent and returned as one object (or null) instead of a list of lines.
+     * json_config.criteria (see applicable()) decides when a save takes it.
      * A line form can have details of its own (details), up to DETAIL_DEPTH levels;
      * $parents are the forms above, so a form can't be a line of itself.
      *
      * @param  list<int>  $parents
-     * @return array<int, array{field: string, source: array, foreign_key: string, amount: ?array, total_field: ?string, details: array}>
+     * @return array<int, array{field: string, one: bool, criteria: ?string, source: array, foreign_key: string, amount: ?array, total_field: ?string, details: array}>
      */
     private function details(Meta $meta, array $parents = []): array
     {
@@ -630,15 +756,17 @@ class MetaDataController extends Controller
             ->map(function (MetaParam $param) use ($parents) {
                 $child = Meta::find($param->ref_meta_id);
                 $fk = $param->json_config['foreign_key'] ?? null;
-                abort_unless($child && is_string($fk), 422, "The detail \"{$param->field_path}\" needs a line form and a foreign_key.");
-                abort_if(in_array($child->id, $parents, true), 422, "The detail \"{$param->field_path}\" uses a form that is already above it.");
+                abort_unless($child && is_string($fk), 422, __('The detail ":field" needs a line form and a foreign_key.', ['field' => $param->field_path]));
+                abort_if(in_array($child->id, $parents, true), 422, __('The detail ":field" uses a form that is already above it.', ['field' => $param->field_path]));
                 abort_if(count($parents) > self::DETAIL_DEPTH, 422, 'Lines can have lines only '.self::DETAIL_DEPTH.' levels deep.');
                 $source = $this->source($child, true);
-                abort_unless(Schema::hasColumn($source['table'], $fk), 422, "The detail \"{$param->field_path}\" points at a column that does not exist.");
+                abort_unless(Schema::hasColumn($source['table'], $fk), 422, __('The detail ":field" points at a column that does not exist.', ['field' => $param->field_path]));
                 $amount = $param->json_config['amount'] ?? null;
 
                 return [
                     'field' => $param->field_path,
+                    'one' => ($param->json_config['one'] ?? false) === true,
+                    'criteria' => is_string($param->json_config['criteria'] ?? null) ? $param->json_config['criteria'] : null,
                     'source' => $source,
                     'foreign_key' => $fk,
                     'amount' => self::amountColumns($amount, $source['columns']),
@@ -646,6 +774,35 @@ class MetaDataController extends Controller
                     'details' => $this->details($child, $parents),
                 ];
             })->all();
+    }
+
+    /**
+     * The details a save takes: those whose json_config.criteria holds, e.g. "roleId == 1 ||
+     * appMetaId == 2 || supplierTypeId == 3". The criteria sees the record (its saved values,
+     * then what is sent), Criteria::userVars, and appMetaId: the app the form was opened in,
+     * sent as _context.app_meta_id and kept only when the user may view that app. A detail
+     * left out is neither checked nor changed, so its saved lines or record stay as they are.
+     *
+     * @return array<int, array>
+     */
+    private function applicable(array $details, Request $request, ?object $before = null): array
+    {
+        if (! array_filter(array_column($details, 'criteria'))) {
+            return $details;
+        }
+        $user = $request->user();
+        $app = (int) $request->input('_context.app_meta_id');
+        $sent = array_filter($request->except('_context'), fn ($v) => ! is_array($v));
+        $vars = $sent + (array) $before + Criteria::userVars($user)
+            + ['appMetaId' => $app && Access::can($user, $app, 'view') ? $app : null];
+
+        return array_values(array_filter($details, function (array $detail) use ($vars) {
+            try {
+                return Criteria::passes($detail['criteria'], $vars);
+            } catch (InvalidArgumentException $e) {
+                abort(422, __('The criteria of ":field": :error', ['field' => $detail['field'], 'error' => $e->getMessage()]));
+            }
+        }));
     }
 
     /**
@@ -663,14 +820,14 @@ class MetaDataController extends Controller
         return array_diff($amount, $columns) === [] ? array_values($amount) : null;
     }
 
-    /** Puts each detail's lines under the row, and each line's own lines under it. */
+    /** Puts each detail's lines under the row (a one-to-one's record, or null), and each line's own lines under it. */
     private function withDetails(object $row, array $details, int $id): object
     {
         foreach ($details as $detail) {
             $s = $detail['source'];
             $lines = DB::table($s['table'])->select($s['columns'])->where($detail['foreign_key'], $id)->orderBy($s['key'])->get();
             $this->withSubLines($lines, $detail);
-            $row->{$detail['field']} = $lines;
+            $row->{$detail['field']} = $detail['one'] ? $lines->first() : $lines;
         }
 
         return $row;
@@ -694,7 +851,8 @@ class MetaDataController extends Controller
                 });
             }
             $lines->each(function (object $line) use ($sub, $byParent, $key) {
-                $line->{$sub['field']} = $byParent->get((string) $line->{$key}, collect())->values();
+                $own = $byParent->get((string) $line->{$key}, collect())->values();
+                $line->{$sub['field']} = $sub['one'] ? $own->first() : $own;
             });
         }
     }
@@ -728,7 +886,8 @@ class MetaDataController extends Controller
             $subFields = array_flip(array_column($detail['details'], 'field'));
 
             foreach ($lines[$detail['field']] as $line) {
-                $lineId = isset($line[$s['key']]) ? (int) $line[$s['key']] : null;
+                // A one-to-one sent without its id still updates the record it has.
+                $lineId = isset($line[$s['key']]) ? (int) $line[$s['key']] : ($detail['one'] ? ($existing[0] ?? null) : null);
                 unset($line[$s['key']]);
                 $subLines = array_intersect_key($line, $subFields);
                 $line = array_diff_key($line, $subFields);
@@ -784,31 +943,40 @@ class MetaDataController extends Controller
      * with it); its columns are the params' field paths. Writing always goes to the meta's
      * table_name, so $forWrite ignores the query.
      *
+     * A datagrid that reuses another (GridReuse) reads its origin's table, query and
+     * workflow, with the params merged along the way.
+     *
      * @return array{query: ?string, table: ?string, columns: string[], key: string, params: Collection}
      */
     private function source(Meta $meta, bool $forWrite = false): array
     {
         $meta->loadMissing('type');
         abort_unless(in_array($meta->type?->code, self::DATA_TYPES, true), 422, 'Only datagrid, form, calendar, gantt, statement and report metas have data.');
-        $sql = trim((string) $meta->query_string);
+        $origin = GridReuse::origin($meta);
+        $own = $origin === $meta ? MetaParam::where('main_meta_id', $meta->id)->orderBy('order_number')->get() : GridReuse::params($meta);
+        $sql = trim((string) $origin->query_string);
+        // A meta with neither table nor query reads the query meta its ref_meta_id names (QueryDesign).
+        if ($sql === '' && trim((string) $origin->table_name) === '') {
+            $sql = QueryDesign::readFrom($origin) ?? '';
+        }
         if ($sql !== '' && ! $forWrite) {
             // Only plain names can be columns: they end up in WHERE and ORDER BY of the outer query.
-            $params = MetaParam::where('main_meta_id', $meta->id)->orderBy('order_number')->get()
-                ->filter(fn (MetaParam $p) => ! in_array($p->data_type, ['detail', 'subgrid'], true) && preg_match('/^[A-Za-z_]\w*$/', $p->field_path))
+            $params = $own
+                ->filter(fn (MetaParam $p) => ! in_array($p->data_type, ['detail', 'subgrid', 'singlefile', 'multifile', 'document'], true) && preg_match('/^[A-Za-z_]\w*$/', $p->field_path))
                 ->values();
             $key = $params->firstWhere('is_primary', true)?->field_path ?? 'id';
 
             return ['query' => $sql, 'table' => null, 'columns' => $params->pluck('field_path')->push($key)->unique()->values()->all(), 'key' => $key, 'params' => $params];
         }
 
-        $table = trim((string) $meta->table_name);
+        $table = trim((string) $origin->table_name);
         abort_if($sql !== '' && $table === '', 422, 'This meta reads from a query, so it can only be changed through a form with a table.');
         abort_if($table === '', 422, 'This meta has no database table set.');
         abort_if(in_array(strtolower($table), self::BLOCKED_TABLES, true), 422, 'This table cannot be used by a meta.');
-        abort_unless(Schema::hasTable($table), 422, "The table \"{$table}\" does not exist.");
+        abort_unless(Schema::hasTable($table), 422, __('The table ":table" does not exist.', ['table' => $table]));
 
         $existing = Schema::getColumnListing($table);
-        $params = MetaParam::where('main_meta_id', $meta->id)->orderBy('order_number')->get()
+        $params = $own
             ->filter(fn (MetaParam $p) => in_array($p->field_path, $existing, true))
             ->values();
 
@@ -819,8 +987,8 @@ class MetaDataController extends Controller
 
         // A grid run by a workflow (its ref_meta_id) also reads each record's status. Forms
         // never write it: only moves through the workflow do.
-        if (! in_array('status_id', $columns, true) && in_array('status_id', $existing, true) && $meta->ref_meta_id
-            && Meta::whereKey($meta->ref_meta_id)->whereHas('type', fn ($q) => $q->where('code', 'workflow'))->exists()) {
+        if (! in_array('status_id', $columns, true) && in_array('status_id', $existing, true) && $origin->ref_meta_id
+            && Meta::whereKey($origin->ref_meta_id)->whereHas('type', fn ($q) => $q->where('code', 'workflow'))->exists()) {
             $columns[] = 'status_id';
         }
 
@@ -834,7 +1002,7 @@ class MetaDataController extends Controller
      */
     private function validated(Request $request, array $source, array $details, ?int $id = null): array
     {
-        $rules = ParamRules::for($source['params'], $source['table'], $source['key'], $id) + $this->lineRules($details);
+        $rules = ParamRules::for($source['params'], $source['table'], $source['key'], $id) + $this->lineRules($details, $request->all());
 
         $valid = $request->validate($rules);
 
@@ -846,24 +1014,38 @@ class MetaDataController extends Controller
         return [$data, $lines];
     }
 
-    /** Rules for each detail's lines ("lines.*.quantity"), and their own lines' ("lines.*.deliveries.*.date"). */
-    private function lineRules(array $details, string $prefix = ''): array
+    /**
+     * Rules for each detail's lines ("lines.*.quantity"), and their own lines' ("lines.*.deliveries.*.date").
+     * A one-to-one's fields have no "*" ("profile.phone") and are checked only when it is sent:
+     * at the top level, when $values hold it as an object; under lines, always.
+     */
+    private function lineRules(array $details, array $values, string $prefix = ''): array
     {
         $rules = [];
         foreach ($details as $detail) {
             $s = $detail['source'];
             $field = $prefix.$detail['field'];
-            $rules[$field] = ['sometimes', 'array'];
-            $rules["{$field}.*.{$s['key']}"] = ['nullable', 'integer'];
-            $rules += ParamRules::for($s['params'], $s['table'], $s['key'], null, "{$field}.*.", [$detail['foreign_key']]);
-            $rules += $this->lineRules($detail['details'], "{$field}.*.");
+            if ($detail['one']) {
+                $rules[$field] = ['sometimes', 'nullable', 'array'];
+                if ($prefix === '' && ! is_array($values[$field] ?? null)) {
+                    continue;
+                }
+                $at = "{$field}.";
+            } else {
+                $rules[$field] = ['sometimes', 'array'];
+                $at = "{$field}.*.";
+            }
+            $rules["{$at}{$s['key']}"] = ['nullable', 'integer'];
+            $rules += ParamRules::for($s['params'], $s['table'], $s['key'], null, $at, [$detail['foreign_key']]);
+            $rules += $this->lineRules($detail['details'], $values, $at);
         }
 
         return $rules;
     }
 
     /**
-     * The lines sent for each detail (re-indexed), with options checked at every level.
+     * The lines sent for each detail (re-indexed), with options checked at every level. A
+     * one-to-one becomes a list of its one record, or of none when sent as null (removing it).
      *
      * @return array<string, array>
      */
@@ -874,9 +1056,10 @@ class MetaDataController extends Controller
             if (! array_key_exists($detail['field'], $values)) {
                 continue;
             }
-            $lines[$detail['field']] = array_values($values[$detail['field']]);
+            $sent = $values[$detail['field']];
+            $lines[$detail['field']] = $detail['one'] ? ($sent === null ? [] : [$sent]) : array_values($sent);
             foreach ($lines[$detail['field']] as $i => $line) {
-                $at = "{$prefix}{$detail['field']}.{$i}.";
+                $at = $detail['one'] ? "{$prefix}{$detail['field']}." : "{$prefix}{$detail['field']}.{$i}.";
                 $this->checkOptions($detail['source']['params'], $line, $at);
                 $lines[$detail['field']][$i] = array_merge($line, $this->checkLines($detail['details'], $line, $at));
             }
@@ -893,7 +1076,7 @@ class MetaDataController extends Controller
             $value = $data[$param->field_path] ?? null;
             if (is_array($options) && $value !== null && $value !== '' && ! in_array($value, $options, true)) {
                 abort(response()->json([
-                    'message' => 'The given data was invalid.',
+                    'message' => __('The given data was invalid.'),
                     'errors' => [$prefix.$param->field_path => ['Pick one of: '.implode(', ', $options).'.']],
                 ], 422));
             }

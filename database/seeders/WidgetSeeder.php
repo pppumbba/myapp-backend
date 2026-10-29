@@ -63,6 +63,64 @@ class WidgetSeeder extends Seeder
                 ['key' => 'height', 'label' => 'Height (px)', 'type' => 'number', 'default' => 240],
                 ['key' => 'fit', 'label' => 'Fit', 'type' => 'select', 'options' => ['cover', 'contain'], 'default' => 'cover'],
             ]],
+            ['photo', 'Wide photo', 'Content', 'photo', 'image', 'A photograph across the whole width, cropped to a wide frame.', [
+                ['key' => 'src', 'label' => 'Image address', 'type' => 'image'],
+                ['key' => 'alt', 'label' => 'Description', 'type' => 'text', 'hint' => 'Read out to people who can’t see the image.'],
+                ['key' => 'caption', 'label' => 'Caption', 'type' => 'text'],
+                ['key' => 'ratio', 'label' => 'Frame', 'type' => 'select', 'options' => ['21:9', '16:9', '3:2'], 'default' => '21:9'],
+                ['key' => 'focus', 'label' => 'Keep in view', 'type' => 'select', 'options' => ['center', 'top', 'bottom', 'left', 'right'], 'default' => 'center', 'hint' => 'The part of the photo the crop keeps.'],
+            ]],
+            ['table', 'Table', 'Content', 'table', 'table', 'Rows and columns you type in: prices, opening hours, sizes.', [
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ['key' => 'subtitle', 'label' => 'Line under it', 'type' => 'text'],
+                ['key' => 'rows', 'label' => 'Rows', 'type' => 'textarea', 'default' => "Item | Price\nFirst row | 0", 'hint' => 'One row per line, cells split by |. The first line is the heading row.'],
+                ['key' => 'note', 'label' => 'Note under the table', 'type' => 'text'],
+            ]],
+            ['carousel', 'Carousel', 'Content', 'carousel', 'slides', 'Pictures one at a time, with Previous, Next and a dot each. Nothing moves by itself.', [
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ['key' => 'ratio', 'label' => 'Frame', 'type' => 'select', 'options' => ['16:9', '21:9', '3:2', '4:3', '1:1'], 'default' => '16:9'],
+                ['key' => 'slides', 'label' => 'Slides', 'type' => 'list', 'default' => [], 'fields' => [
+                    ['key' => 'src', 'label' => 'Image address', 'type' => 'image'],
+                    ['key' => 'alt', 'label' => 'Description', 'type' => 'text', 'hint' => 'Read out to people who can’t see the image.'],
+                    ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                    ['key' => 'text', 'label' => 'Caption', 'type' => 'text'],
+                ]],
+            ]],
+            ['gallery', 'Gallery', 'Content', 'gallery', 'gallery', 'Pictures on a grid; one opens large when clicked.', [
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ['key' => 'columns', 'label' => 'Columns', 'type' => 'select', 'options' => ['2', '3', '4'], 'default' => '3'],
+                ['key' => 'images', 'label' => 'Pictures', 'type' => 'list', 'default' => [], 'fields' => [
+                    ['key' => 'src', 'label' => 'Image address', 'type' => 'image'],
+                    ['key' => 'alt', 'label' => 'Description', 'type' => 'text', 'hint' => 'Read out to people who can’t see the image.'],
+                    ['key' => 'caption', 'label' => 'Caption', 'type' => 'text'],
+                ]],
+            ]],
+            ['accordion', 'Accordion', 'Content', 'accordion', 'accordion', 'Questions or topics that open one at a time: an FAQ, opening terms.', [
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ['key' => 'items', 'label' => 'Rows', 'type' => 'list', 'default' => [], 'fields' => [
+                    ['key' => 'title', 'label' => 'Question or topic', 'type' => 'text'],
+                    ['key' => 'text', 'label' => 'Answer', 'type' => 'textarea'],
+                ]],
+                ['key' => 'first_open', 'label' => 'First row starts open', 'type' => 'boolean', 'default' => false],
+                ['key' => 'many', 'label' => 'Several may be open at once', 'type' => 'boolean', 'default' => false],
+            ]],
+            ['collapse', 'Show more', 'Content', 'collapse', 'collapse', 'Text hidden under one line until it is opened: small print, the long version.', [
+                ['key' => 'label', 'label' => 'Line that opens it', 'type' => 'text', 'default' => 'Show more'],
+                ['key' => 'text', 'label' => 'Text', 'type' => 'textarea'],
+                ['key' => 'open', 'label' => 'Starts open', 'type' => 'boolean', 'default' => false],
+            ]],
+            ['tabs', 'Tabs', 'Content', 'tabs', 'tabs', 'A row of tabs, each showing its own text: by season, by audience, by plan.', [
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ['key' => 'items', 'label' => 'Tabs', 'type' => 'list', 'default' => [], 'fields' => [
+                    ['key' => 'label', 'label' => 'Tab', 'type' => 'text'],
+                    ['key' => 'text', 'label' => 'Text', 'type' => 'textarea'],
+                ]],
+            ]],
+            ['quote', 'Quote', 'Content', 'quote', 'quote', 'Words someone really said, with their name.', [
+                ['key' => 'text', 'label' => 'Quote', 'type' => 'textarea'],
+                ['key' => 'name', 'label' => 'Who said it', 'type' => 'text'],
+                ['key' => 'role', 'label' => 'Their role or place', 'type' => 'text'],
+            ]],
             ['callout', 'Callout', 'Content', 'callout', 'info', 'A coloured note that stands out.', [
                 ['key' => 'tone', 'label' => 'Kind', 'type' => 'select', 'options' => ['info', 'success', 'warning', 'error'], 'default' => 'info'],
                 ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
@@ -123,11 +181,32 @@ class WidgetSeeder extends Seeder
                 ['key' => 'open_params', 'label' => 'Passing', 'type' => 'text', 'default' => 'id=id', 'hint' => 'parameter=field, comma separated.'],
                 ['key' => 'empty_text', 'label' => 'When there are none', 'type' => 'text', 'default' => 'Nothing here yet.'],
             ]],
+            ['schedule', 'Schedule', 'Data', 'schedule', 'calendar', 'Times from a grid, each with what is on, the spaces left and a Book button.', [
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ['key' => 'meta_id', 'label' => 'Times from', 'type' => 'meta', 'meta_types' => ['datagrid'], 'hint' => 'A grid, one record per time; its filters and permissions apply.'],
+                ['key' => 'time_field', 'label' => 'Starts (field)', 'type' => 'text', 'default' => 'starts_at'],
+                ['key' => 'end_field', 'label' => 'Ends (field)', 'type' => 'text', 'default' => 'ends_at'],
+                ['key' => 'name_field', 'label' => 'What is on (field)', 'type' => 'text', 'default' => 'name'],
+                ['key' => 'detail_field', 'label' => 'Detail (field)', 'type' => 'text'],
+                ['key' => 'spaces_field', 'label' => 'Spaces left (field)', 'type' => 'text', 'hint' => 'At 0 the time shows as full and can’t be booked.'],
+                ['key' => 'limit', 'label' => 'How many', 'type' => 'number', 'default' => 8],
+                ['key' => 'book_meta_id', 'label' => 'Book opens', 'type' => 'meta', 'meta_types' => ['form']],
+                ['key' => 'book_params', 'label' => 'Passing', 'type' => 'text', 'default' => 'session_id=id', 'hint' => 'parameter=field, comma separated.'],
+                ['key' => 'book_label', 'label' => 'Button', 'type' => 'text', 'default' => 'Book'],
+                ['key' => 'empty_text', 'label' => 'When there are none', 'type' => 'text', 'default' => 'Nothing on today.'],
+            ]],
             ['datagrid', 'Data grid', 'Data', 'meta', 'table', 'A grid of records, with its filters and buttons.', [
                 ['key' => 'meta_id', 'label' => 'Grid', 'type' => 'meta', 'meta_types' => ['datagrid']],
             ]],
             ['form', 'Form', 'Data', 'meta', 'form', 'A form to add a record.', [
                 ['key' => 'meta_id', 'label' => 'Form', 'type' => 'meta', 'meta_types' => ['form']],
+            ]],
+            ['webform', 'Web form', 'Data', 'webform', 'send', 'A form drawn in the website’s own look, sent as a new record. Pages in the app show the usual form.', [
+                ['key' => 'meta_id', 'label' => 'Form', 'type' => 'meta', 'meta_types' => ['form'], 'hint' => 'On a website it must be public.'],
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text', 'hint' => 'Leave blank to use the form’s own name.'],
+                ['key' => 'subtitle', 'label' => 'Line under it', 'type' => 'text', 'hint' => 'Leave blank to use the form’s description.'],
+                ['key' => 'submit_label', 'label' => 'Button', 'type' => 'text', 'default' => 'Send'],
+                ['key' => 'done_text', 'label' => 'After sending', 'type' => 'text', 'default' => 'Thank you. We have it and will be in touch.'],
             ]],
             ['screen', 'Any screen', 'Data', 'meta', 'layers', 'Any meta: a calendar, statement, dashboard, tabs…', [
                 ['key' => 'meta_id', 'label' => 'Screen', 'type' => 'meta'],

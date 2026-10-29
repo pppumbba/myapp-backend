@@ -36,7 +36,7 @@ class MetaVersionController extends Controller
         Access::requireAdmin($request->user());
         $note = $request->validate(['note' => ['nullable', 'string', 'max:255']])['note'] ?? null;
         $matching = MetaVersions::matching($meta->id);
-        abort_if($matching !== null, 422, "Nothing to save: it is the same as version {$matching?->version_no}.");
+        abort_if($matching !== null, 422, __('Nothing to save: it is the same as version :version.', ['version' => $matching?->version_no]));
 
         return response()->json(MetaVersions::save($meta->id, $request->user(), $note)->load('creator:id,name'), 201);
     }

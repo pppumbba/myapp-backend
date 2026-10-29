@@ -31,6 +31,30 @@ class NamedSql
      */
     public static function bind(string $sql, array $values): array
     {
+        return self::walk($sql, function (string $name, array &$bindings) use ($values) {
+            $value = $values[$name] ?? null;
+            $bindings[] = $value === '' ? null : $value;
+
+            return '?';
+        });
+    }
+
+    /**
+     * Puts SQL in place of some :name parameters (name => SQL), the way bind finds them; the
+     * others stay :named. A stored query used inside another gets its values this way.
+     */
+    public static function substitute(string $sql, array $replacements): string
+    {
+        return self::walk($sql, fn (string $name) => $replacements[$name] ?? ':'.$name)[0];
+    }
+
+    /**
+     * Calls $replace for each :name outside '...' and casts, and puts in what it returns.
+     *
+     * @return array{0: string, 1: array, 2: string[]}
+     */
+    private static function walk(string $sql, callable $replace): array
+    {
         $bindings = [];
         $names = [];
         $parts = preg_split("/('(?:[^']|'')*')/", $sql, -1, PREG_SPLIT_DELIM_CAPTURE);
@@ -39,12 +63,10 @@ class NamedSql
             if ($i % 2 === 1) {
                 continue;
             }
-            $parts[$i] = preg_replace_callback('/(?<![:\w]):([A-Za-z_]\w*)/', function ($m) use (&$bindings, &$names, $values) {
+            $parts[$i] = preg_replace_callback('/(?<![:\w]):([A-Za-z_]\w*)/', function ($m) use (&$bindings, &$names, $replace) {
                 $names[] = $m[1];
-                $value = $values[$m[1]] ?? null;
-                $bindings[] = $value === '' ? null : $value;
 
-                return '?';
+                return $replace($m[1], $bindings);
             }, $part);
         }
 

@@ -32,7 +32,10 @@ class MetaTypeSeeder extends Seeder
             ['code' => 'widget_template', 'name' => 'Widget template', 'description' => 'The parts of a composite widget, laid out like a page.'],
             ['code' => 'workspace', 'name' => 'Workspace', 'description' => 'One record and everything about it, such as a tender with its items, bidders and evaluation.'],
             ['code' => 'stage_query', 'name' => 'Stage query', 'description' => 'SQL that changes data (INSERT, UPDATE, DELETE) with named parameters, run by hand, after a form saves or on a schedule.'],
+            ['code' => 'query', 'name' => 'Query', 'description' => 'A SELECT drawn by dragging tables and views, joining them and picking columns, filters, groups and order; grids and other queries read it.'],
+            ['code' => 'theme', 'name' => 'Theme', 'description' => 'How the app looks: brand colour, greys, corners, font and size, in light and dark. Users pick one; one is the default, and an app can have its own.'],
             ['code' => 'matrix', 'name' => 'Matrix', 'description' => 'A value for each pair of records from two grids, such as each bidder’s price for each item.'],
+            ['code' => 'website', 'name' => 'Website', 'description' => 'A public website: pages from the page builder with addresses, a menu, its own domains, publishing and visit counts.'],
         ];
 
         // meta_types has no timestamps, so upsert through the query builder. Safe to run again.

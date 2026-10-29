@@ -1,0 +1,21 @@
+$kind: http-request
+name: get room
+method: GET
+url: '{{base_url}}/metas/:meta/data/:id'
+order: 3000
+pathVariables:
+  - key: meta
+    value: '{{room_form}}'
+  - key: id
+    value: '{{room_id}}'
+headers:
+  - key: Accept
+    value: application/json
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('reads back the change', () => {
+        pm.response.to.have.status(200);
+        pm.expect(pm.response.json().capacity).to.eql(12);
+      });

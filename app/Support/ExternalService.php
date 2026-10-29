@@ -232,14 +232,14 @@ class ExternalService
 
     private static function refuseChanges(Meta $meta): void
     {
-        abort_if(self::listsOnly($meta), 405, "\"{$meta->name}\" only lists the service's records; they can't be changed here.");
+        abort_if(self::listsOnly($meta), 405, __('":name" only lists the service\'s records; they can\'t be changed here.', ['name' => $meta->name]));
     }
 
     /** The params that are fields: not details, subgrids or tabs, which a service record does not have. */
     private static function params(Meta $meta): Collection
     {
         return MetaParam::where('main_meta_id', $meta->id)->orderBy('order_number')->get()
-            ->reject(fn (MetaParam $p) => in_array($p->data_type, ['detail', 'subgrid', 'tabs'], true))
+            ->reject(fn (MetaParam $p) => in_array($p->data_type, ['detail', 'subgrid', 'tabs', 'singlefile', 'multifile', 'document'], true))
             ->values();
     }
 
@@ -307,7 +307,7 @@ class ExternalService
         try {
             $answer = $call($http);
         } catch (ConnectionException) {
-            abort(502, "The service of \"{$meta->name}\" could not be reached.");
+            abort(502, __('The service of ":name" could not be reached.', ['name' => $meta->name]));
         }
 
         if ($answer->successful()) {
@@ -386,7 +386,7 @@ class ExternalService
             return [];
         }
         $value = json_decode($text, true);
-        abort_unless(is_array($value) && ! array_is_list($value), 422, "{$column} must be a JSON object.");
+        abort_unless(is_array($value) && ! array_is_list($value), 422, __(':column must be a JSON object.', ['column' => $column]));
 
         return $value;
     }

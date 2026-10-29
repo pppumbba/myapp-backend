@@ -47,8 +47,16 @@ class AccessTest extends TestCase
     {
         $grid = $this->metaId('proc_items_grid');
         $workflow = $this->metaId('proc_order_workflow');
-        Sanctum::actingAs(User::factory()->create());
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
 
+        // A meta with no permission rows is for admins only.
+        $this->getJson("/api/metas/{$grid}")->assertForbidden();
+        $this->getJson("/api/metas/{$grid}/data")->assertForbidden();
+        $this->assertNotContains($grid, collect($this->getJson('/api/metas')->assertOk()->json())->pluck('id'));
+        $this->getJson('/api/user/access')->assertOk()->assertJsonMissingPath("metas.{$grid}");
+
+        $this->allow($user, [$grid, $workflow]);
         $this->getJson("/api/metas/{$grid}")->assertOk();
         $this->putJson("/api/metas/{$grid}", ['name' => 'Mine now'])->assertForbidden();
         $this->deleteJson("/api/metas/{$grid}")->assertForbidden();
@@ -103,9 +111,9 @@ class AccessTest extends TestCase
         $workflow = $this->metaId('proc_order_workflow');
         $grid = $this->metaId('proc_orders_grid');
         $order = DB::table('proc_purchase_orders')->where('po_number', 'PO-2026-0103')->first();
-        $buyer = $this->userWithRole('buyer');
-        $approver = $this->userWithRole('approver');
-        $outsider = User::factory()->create();
+        $buyer = $this->allow($this->userWithRole('buyer'), [$grid, $workflow]);
+        $approver = $this->allow($this->userWithRole('approver'), [$grid, $workflow]);
+        $outsider = $this->allow(User::factory()->create(), [$grid, $workflow]);
         $role = fn (string $code) => Role::where('code', $code)->value('id');
 
         Sanctum::actingAs($this->admin);

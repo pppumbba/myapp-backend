@@ -1,0 +1,26 @@
+$kind: http-request
+name: create room
+method: POST
+url: '{{base_url}}/metas/:meta/data'
+order: 1000
+pathVariables:
+  - key: meta
+    value: '{{room_form}}'
+headers:
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "LOADTEST {{$randomUUID}}",
+      "floor": "{{$randomInt}}",
+      "capacity": 8,
+      "is_active": true
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('created', () => pm.response.to.have.status(201));
+      pm.variables.set('room_id', pm.response.json().id);

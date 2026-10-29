@@ -8,6 +8,7 @@ use App\Models\MetaPermission;
 use App\Models\WfmStatus;
 use App\Models\WfmStatusPermission;
 use App\Support\Access;
+use App\Support\RoleLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -40,11 +41,13 @@ class PermissionController extends Controller
             'rows.*.can_delete' => ['sometimes', 'boolean'],
         ]);
 
-        DB::transaction(function () use ($meta, $data) {
+        DB::transaction(function () use ($request, $meta, $data) {
+            $before = MetaPermission::where('meta_id', $meta->id)->get();
             MetaPermission::where('meta_id', $meta->id)->delete();
             foreach ($data['rows'] as $row) {
                 MetaPermission::create($row + ['meta_id' => $meta->id]);
             }
+            RoleLog::metas($before, MetaPermission::where('meta_id', $meta->id)->get(), $request->user());
         });
 
         return $this->meta($request, $meta);
@@ -75,11 +78,13 @@ class PermissionController extends Controller
         $pairs = collect($data['rows'])->map(fn ($r) => "{$r['status_id']}:{$r['role_id']}");
         abort_if($pairs->duplicates()->isNotEmpty(), 422, 'Each role can only appear once per status.');
 
-        DB::transaction(function () use ($statuses, $data) {
+        DB::transaction(function () use ($request, $statuses, $data) {
+            $before = WfmStatusPermission::whereIn('status_id', $statuses)->get();
             WfmStatusPermission::whereIn('status_id', $statuses)->delete();
             foreach ($data['rows'] as $row) {
                 WfmStatusPermission::create($row);
             }
+            RoleLog::statuses($before, WfmStatusPermission::whereIn('status_id', $statuses)->get(), $request->user());
         });
 
         return $this->workflow($request, $meta);

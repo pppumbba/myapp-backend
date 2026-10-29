@@ -168,11 +168,11 @@ class ChartQuery
     {
         $column = function (mixed $value, string $what, bool $required = false) use ($names): ?string {
             if ($value === null || $value === '') {
-                abort_if($required, 422, "The chart needs {$what}.");
+                abort_if($required, 422, __('The chart needs :what.', ['what' => $what]));
 
                 return null;
             }
-            abort_unless(is_string($value) && in_array($value, $names, true), 422, "The chart's {$what} \"".(is_scalar($value) ? $value : '?').'" is not a column of its data.');
+            abort_unless(is_string($value) && in_array($value, $names, true), 422, __('The chart\'s :what ":value" is not a column of its data.', ['what' => $what, 'value' => is_scalar($value) ? $value : '?']));
 
             return $value;
         };
@@ -199,7 +199,7 @@ class ChartQuery
         $filters = [];
         foreach (is_array($config['filters'] ?? null) ? $config['filters'] : [] as $f) {
             $op = $f['op'] ?? '=';
-            abort_unless(in_array($op, self::OPERATORS, true), 422, "A chart filter can't use \"{$op}\".");
+            abort_unless(in_array($op, self::OPERATORS, true), 422, __('A chart filter can\'t use ":op".', ['op' => $op]));
             $value = $f['value'] ?? null;
             abort_unless($value === null || is_scalar($value), 422, 'A chart filter value must be text or a number.');
             $filters[] = ['column' => $column($f['column'] ?? null, 'filter column', true), 'op' => $op, 'value' => $value];
@@ -255,7 +255,7 @@ class ChartQuery
         $table = trim((string) $chart->table_name);
         abort_if($table === '', 422, 'This chart has no table or query to read from yet.');
         abort_if(in_array(strtolower($table), MetaDataController::BLOCKED_TABLES, true), 422, 'This table cannot be used by a meta.');
-        abort_unless(Schema::hasTable($table), 422, "The table \"{$table}\" does not exist.");
+        abort_unless(Schema::hasTable($table), 422, __('The table ":table" does not exist.', ['table' => $table]));
 
         return $table;
     }

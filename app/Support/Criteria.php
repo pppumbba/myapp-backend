@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\User;
 use InvalidArgumentException;
 
 /**
@@ -11,8 +12,9 @@ use InvalidArgumentException;
  * It reads the expression itself and never runs it as PHP or SQL. It understands numbers,
  * 'text' or "text", true/false/null, names, ( ), the comparisons == != <> > < >= <= (a single
  * = means ==), && || ! (also and/or/not), and + - * /. A name is looked up as written, then
- * as snake_case ("totalAmount" finds total_amount), then ignoring case. Mistakes throw
- * InvalidArgumentException with a message a person can act on.
+ * as snake_case ("totalAmount" finds total_amount), then ignoring case. A name can hold a
+ * list (roleId: every role the user has); == then means "is in the list" and != "is not".
+ * Mistakes throw InvalidArgumentException with a message a person can act on.
  */
 class Criteria
 {
@@ -31,6 +33,24 @@ class Criteria
         }
 
         return (bool) (new self($vars, false))->run((string) $expression);
+    }
+
+    /**
+     * What every criteria can use about the person: sessionUserId/Name/Email, roleId (the
+     * list of their role ids), today, now, and their session values.
+     *
+     * @return array<string, mixed>
+     */
+    public static function userVars(?User $user): array
+    {
+        return [
+            'sessionUserId' => $user?->id,
+            'sessionUserName' => $user?->name,
+            'sessionUserEmail' => $user?->email,
+            'roleId' => $user?->roleIds() ?? [],
+            'today' => now()->toDateString(),
+            'now' => now()->toDateTimeString(),
+        ] + SessionValues::for($user);
     }
 
     /** Throws if the expression can't be read; unknown names are fine here (they depend on the record). */
@@ -156,14 +176,16 @@ class Criteria
 
         if ($op === '==' || $op === '!=') {
             $equal = match (true) {
-                // null matches only null or empty text, never 0.
-                $left === null || $right === null => ($left ?? '') === ($right ?? ''),
-                is_numeric($left) && is_numeric($right) => (float) $left === (float) $right,
-                is_bool($left) || is_bool($right) => (bool) $left === (bool) $right,
-                default => (string) $left === (string) $right,
+                is_array($left) && is_array($right) => self::any($left, fn ($l) => self::any($right, fn ($r) => self::same($l, $r))),
+                is_array($left) => self::any($left, fn ($l) => self::same($l, $right)),
+                is_array($right) => self::any($right, fn ($r) => self::same($left, $r)),
+                default => self::same($left, $right),
             };
 
             return $op === '==' ? $equal : ! $equal;
+        }
+        if (is_array($left) || is_array($right)) {
+            throw new InvalidArgumentException('A list (like roleId) can only be compared with == or !=.');
         }
 
         $order = is_numeric($left) && is_numeric($right) ? (float) $left <=> (float) $right : strcmp((string) $left, (string) $right);
@@ -173,6 +195,28 @@ class Criteria
             '<' => $order < 0,
             '>=' => $order >= 0,
             '<=' => $order <= 0,
+        };
+    }
+
+    private static function any(array $list, callable $test): bool
+    {
+        foreach ($list as $item) {
+            if ($test($item)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function same(mixed $left, mixed $right): bool
+    {
+        return match (true) {
+            // null matches only null or empty text, never 0.
+            $left === null || $right === null => ($left ?? '') === ($right ?? ''),
+            is_numeric($left) && is_numeric($right) => (float) $left === (float) $right,
+            is_bool($left) || is_bool($right) => (bool) $left === (bool) $right,
+            default => (string) $left === (string) $right,
         };
     }
 

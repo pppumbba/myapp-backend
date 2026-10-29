@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Meta;
 use App\Support\Access;
 use App\Support\MetaVersions;
+use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -73,6 +74,9 @@ class MetaController extends Controller
     {
         Access::require($request->user(), $meta, 'view');
         $meta->load(['type', 'refMeta', 'widget', 'tags']);
+        if ($request->boolean('translated')) {
+            Translations::apply([$meta], 'metas');
+        }
 
         return response()->json($request->user()?->isAdmin() ? $meta->makeVisible(self::SECRET_COLUMNS) : $meta);
     }
@@ -120,12 +124,14 @@ class MetaController extends Controller
             'name' => [$current ? 'sometimes' : 'required', 'string', 'max:255'],
             'label_name' => ['nullable', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
+            'is_log' => ['sometimes', 'boolean'],
+            'is_public' => ['sometimes', 'boolean'],
             'type_id' => ['nullable', 'integer', 'exists:meta_types,id'],
             'ref_meta_id' => ['nullable', 'integer', 'exists:metas,id'],
             // A widget meta's library entry (see Widget).
             'widget_id' => ['nullable', 'integer', 'exists:widgets,id'],
             'description' => ['nullable', 'string'],
-            'table_name' => ['nullable', 'string', 'max:255'],
+            'table_name' => ['nullable', 'string', 'max:191'],
             'query_string' => ['nullable', 'string'],
             'load_expression_string' => ['nullable', 'string'],
             'event_expression_string' => ['nullable', 'string'],

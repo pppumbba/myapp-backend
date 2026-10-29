@@ -49,6 +49,6 @@ class ProfileController extends Controller
         $current = $user->currentAccessToken();
         $user->tokens()->when($current?->id, fn ($q, $id) => $q->whereKeyNot($id))->delete();
 
-        return response()->json(['message' => 'Password changed.']);
+        return response()->json(['message' => __('Password changed.')]);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Http\Controllers\Api\V1\MetaDataController;
 use App\Models\Meta;
 use App\Models\MetaParam;
+use App\Models\User;
 use DateTimeImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
@@ -39,7 +40,7 @@ class ExcelImport
     /** Problems listed back; more are only counted. */
     private const MAX_ERRORS = 200;
 
-    private const SKIPPED_TYPES = ['detail', 'subgrid', 'signature', 'json'];
+    private const SKIPPED_TYPES = ['detail', 'subgrid', 'signature', 'json', 'singlefile', 'multifile', 'document'];
 
     private string $table;
 
@@ -58,12 +59,12 @@ class ExcelImport
 
     private int $errorCount = 0;
 
-    public function __construct(private Meta $meta)
+    public function __construct(private Meta $meta, private ?User $user = null)
     {
         $table = trim((string) $meta->table_name);
         abort_if($table === '', 422, 'This import has no table set.');
         abort_if(in_array(strtolower($table), MetaDataController::BLOCKED_TABLES, true), 422, 'This table cannot be used by a meta.');
-        abort_unless(Schema::hasTable($table), 422, "The table \"{$table}\" does not exist.");
+        abort_unless(Schema::hasTable($table), 422, __('The table ":table" does not exist.', ['table' => $table]));
         $this->table = $table;
 
         $existing = Schema::getColumnListing($table);
@@ -448,17 +449,36 @@ class ExcelImport
         $hasUpdated = Schema::hasColumn($this->table, 'updated_at');
 
         try {
-            DB::transaction(function () use ($records, $now, $hasCreated, $hasUpdated) {
+            RecordLog::as('import', fn () => DB::transaction(function () use ($records, $now, $hasCreated, $hasUpdated) {
+                // With the log on, rows are read before they change, and new ones get their id.
+                $logged = RecordLog::enabled($this->meta);
+                $before = $logged
+                    ? DB::table($this->table)->whereIn($this->primary, array_filter(array_column($records, 'id')))->get()->keyBy($this->primary)->map(fn ($r) => (array) $r)
+                    : collect();
+                $log = [];
                 foreach ($records as $r) {
                     $values = $r['values'] + ($hasUpdated ? ['updated_at' => $now] : []);
                     if ($r['id'] === null) {
                         $values = Autonumber::fill($this->table, $this->params, $values);
-                        DB::table($this->table)->insert($values + ($hasCreated ? ['created_at' => $now] : []));
+                        $row = $values + ($hasCreated ? ['created_at' => $now] : []);
+                        if ($logged) {
+                            $id = (int) DB::table($this->table)->insertGetId($row);
+                            $log[] = [$id, 'created', null, [$this->primary => $id] + $row];
+                        } else {
+                            DB::table($this->table)->insert($row);
+                        }
                     } else {
                         DB::table($this->table)->where($this->primary, $r['id'])->update($values);
+                        if ($logged) {
+                            $old = $before[$r['id']] ?? [];
+                            $log[] = [(int) $r['id'], 'updated', $old, $values + $old];
+                        }
                     }
                 }
-            });
+                if ($log) {
+                    RecordLog::writeMany($this->meta, $this->table, $log, $this->user);
+                }
+            }));
         } catch (QueryException $e) {
             abort(422, 'The database refused the import, so nothing was saved: '.($e->errorInfo[2] ?? 'unknown error').'.');
         }

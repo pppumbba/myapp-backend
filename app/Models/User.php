@@ -13,12 +13,35 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'theme_mode', 'theme_meta_id', 'ui_size', 'locale'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * A new account. The very first account runs the place: it gets the admin role.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    public static function startAccount(array $attributes): self
+    {
+        $first = ! self::exists();
+        $user = self::create($attributes);
+        if ($first) {
+            $user->roles()->attach(Role::firstOrCreate(['code' => Role::ADMIN], ['name' => 'Administrator'])->id);
+            $user->forgetRoles();
+        }
+
+        return $user;
+    }
+
+    /** Sign-in accounts at other providers (Google) linked to this user. */
+    public function socialAccounts(): HasMany
+    {
+        return $this->hasMany(SocialAccount::class);
+    }
 
     public function roles(): BelongsToMany
     {
@@ -34,6 +57,13 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->perRequest('is_admin', fn () => $this->roles()->where('code', Role::ADMIN)->exists());
+    }
+
+    /** After the user's roles change: isAdmin() and roleIds() look again. */
+    public function forgetRoles(): void
+    {
+        request()->attributes->remove("user.{$this->id}.is_admin");
+        request()->attributes->remove("user.{$this->id}.role_ids");
     }
 
     /**

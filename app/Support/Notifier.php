@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Http\Controllers\Api\V1\MetaDataController;
+use App\Jobs\SendNotificationEmail;
 use App\Models\Meta;
 use App\Models\MetaNotificationMap;
 use App\Models\MetaParam;
@@ -31,6 +32,7 @@ use Throwable;
  *  - link_url (with the same placeholders), else link_meta_id, opened on the record when
  *    link_record is set.
  *  - exclude_actor (default true): whoever made the change isn't told about it.
+ *  - email: also emailed to each recipient, by the queue (SendNotificationEmail).
  *
  * Its params are the recipients, each by data_type: role (field_path = the role's code),
  * user (an email), field (a column of the record holding a user's id, email or name),
@@ -116,6 +118,7 @@ class Notifier
     public static function send(Meta $rule, ?object $record, ?int $id, ?User $actor, ?object $before = null, ?int $statusId = null, ?Collection $only = null): int
     {
         $message = self::compose($rule, $record, $id, $actor, $before, $statusId);
+        $email = self::emails($rule);
         $now = now();
         $rows = ($only ?? $message['recipients'])->map(fn (User $u) => [
             'user_id' => $u->id,
@@ -124,13 +127,29 @@ class Notifier
             'title' => $message['title'],
             'body' => $message['body'],
             'link' => $message['link'],
+            'email_status' => $email ? 'queued' : null,
             'created_at' => $now,
         ])->values();
         foreach ($rows->chunk(500) as $chunk) {
             UserNotification::insert($chunk->all());
         }
 
+        if ($email && $rows->isNotEmpty()) {
+            // The rows just written: queued for this rule at this moment, for these people.
+            $ids = UserNotification::where('notification_meta_id', $rule->id)->where('email_status', 'queued')
+                ->where('created_at', $now)->whereIn('user_id', $rows->pluck('user_id'))->pluck('id');
+            foreach ($ids->chunk(50) as $chunk) {
+                SendNotificationEmail::dispatch($chunk->values()->all())->afterCommit();
+            }
+        }
+
         return $rows->count();
+    }
+
+    /** Whether the rule also goes out by email (json_config.email). */
+    public static function emails(Meta $rule): bool
+    {
+        return ($rule->json_config['email'] ?? false) === true;
     }
 
     /** Whether the record meets the rule's changed_field and conditions. */

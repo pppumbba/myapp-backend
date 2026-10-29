@@ -104,7 +104,7 @@ class PageBuilderTest extends TestCase
     public function test_only_admins_build_pages_and_change_the_library(): void
     {
         $page = $this->newPage();
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs($this->allow(User::factory()->create(), [$page->id]));
 
         $this->getJson("/api/metas/{$page->id}/page")->assertOk();
         $this->putJson("/api/metas/{$page->id}/page", ['items' => []])->assertForbidden();

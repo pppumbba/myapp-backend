@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Support\Access;
+use App\Support\RoleLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -35,7 +36,9 @@ class RoleController extends Controller
         $data = $this->validated($request, $role);
         abort_if($role->code === Role::ADMIN && isset($data['code']) && $data['code'] !== Role::ADMIN, 422, 'The admin role keeps its code.');
 
+        $before = $role->only(['code', 'name', 'description']);
         $role->update($data);
+        RoleLog::role($role->id, $before, $role->only(['code', 'name', 'description']), $request->user());
 
         return response()->json($role->loadCount('users'));
     }

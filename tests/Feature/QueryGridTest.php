@@ -19,7 +19,7 @@ class QueryGridTest extends TestCase
     {
         parent::setUp();
         $this->seed(ProcurementDemoSeeder::class);
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
     }
 
     private function metaId(string $code): int
@@ -123,9 +123,12 @@ class QueryGridTest extends TestCase
         $id = $this->postJson("/api/metas/{$grid}/actions", [
             'action' => 'custom', 'label' => 'Duplicate', 'form_meta_id' => $form, 'needs_row' => true,
             'json_config' => ['params' => ['id' => 'id']],
-        ])->assertCreated()->assertJsonPath('order_number', 11)->json('id');
+        ])->assertCreated()->assertJsonPath('order_number', 11)->assertJsonPath('show_in_toolbar', true)->json('id');
 
         $this->putJson("/api/actions/{$id}", ['label' => 'Copy'])->assertOk()->assertJsonPath('label', 'Copy');
+        // Only on each row, not in the toolbar.
+        $this->putJson("/api/actions/{$id}", ['show_in_toolbar' => false, 'show_in_row' => true])
+            ->assertOk()->assertJsonPath('show_in_toolbar', false)->assertJsonPath('show_in_row', true);
         $this->postJson("/api/metas/{$grid}/actions", ['action' => 'explode', 'label' => 'X', 'form_meta_id' => $form])
             ->assertUnprocessable()->assertJsonValidationErrors(['action']);
 

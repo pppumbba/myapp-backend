@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\NotificationMail;
 use App\Models\Meta;
 use App\Models\User;
 use App\Models\UserNotification;
@@ -9,6 +10,7 @@ use App\Models\WfmStatus;
 use Database\Seeders\ProcurementDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -52,11 +54,12 @@ class NotificationBuilderTest extends TestCase
 
     public function test_approval_tells_whoever_asked_only_when_the_status_changes_to_approved(): void
     {
-        $requester = User::factory()->create(['name' => 'Rita Requester']);
         $request = DB::table('proc_purchase_requests')->where('status', '!=', 'approved')->first();
         DB::table('proc_purchase_requests')->where('id', $request->id)->update(['requested_by' => 'Rita Requester', 'status' => 'submitted']);
         $form = $this->metaId('proc_request_form');
         $rule = $this->metaId('proc_notify_request_approved');
+        $source = (int) Meta::find($rule)->json_config['source_meta_id'];
+        $requester = $this->allow(User::factory()->create(['name' => 'Rita Requester']), [$source]);
 
         $this->putJson("/api/metas/{$form}/data/{$request->id}", ['notes' => 'Looked at it'])->assertOk();
         $this->assertSame(0, UserNotification::where('notification_meta_id', $rule)->count());
@@ -114,5 +117,43 @@ class NotificationBuilderTest extends TestCase
         ])->assertCreated();
 
         $this->assertSame(0, UserNotification::whereNotNull('notification_meta_id')->count());
+    }
+
+    public function test_a_notification_set_to_email_also_mails_each_recipient(): void
+    {
+        Mail::fake();
+        $rule = Meta::find($this->metaId('proc_notify_new_request'));
+        $rule->update(['json_config' => [...$rule->json_config, 'email' => true]]);
+        $item = DB::table('proc_items')->value('id');
+
+        $this->postJson("/api/metas/{$this->metaId('proc_request_form')}/data", [
+            'request_no' => 'PR-N-3', 'title' => 'Desks', 'item_id' => $item, 'quantity' => 2, 'status' => 'draft',
+        ])->assertCreated();
+
+        Mail::assertSent(NotificationMail::class, fn (NotificationMail $mail) => $mail->hasTo($this->otherAdmin->email)
+            && $mail->notification->title === 'New request PR-N-3: Desks');
+        Mail::assertSentCount(1);
+        $sent = UserNotification::where('notification_meta_id', $rule->id)->sole();
+        $this->assertSame('sent', $sent->email_status);
+        $this->assertNotNull($sent->emailed_at);
+        $this->assertSame('sent', $this->getJson("/api/metas/{$rule->id}/notification/log")->json('0.email_status'));
+
+        // Its link opens in the frontend.
+        $url = rtrim(config('app.frontend_url'), '/').$sent->link;
+        $this->assertSame($url, NotificationMail::url($sent->link));
+        (new NotificationMail($sent))->assertSeeInHtml('New request PR-N-3: Desks')->assertSeeInHtml($url);
+    }
+
+    public function test_a_notification_without_email_mails_nobody(): void
+    {
+        Mail::fake();
+        $item = DB::table('proc_items')->value('id');
+
+        $this->postJson("/api/metas/{$this->metaId('proc_request_form')}/data", [
+            'request_no' => 'PR-N-4', 'title' => 'Lamps', 'item_id' => $item, 'quantity' => 1, 'status' => 'draft',
+        ])->assertCreated();
+
+        Mail::assertNothingSent();
+        $this->assertNull(UserNotification::where('notification_meta_id', $this->metaId('proc_notify_new_request'))->sole()->email_status);
     }
 }

@@ -7,29 +7,42 @@ use App\Models\Meta;
 use App\Models\MetaParam;
 use App\Support\Access;
 use App\Support\Autonumber;
+use App\Support\Criteria;
 use App\Support\FilterLookups;
+use App\Support\GridReuse;
+use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use InvalidArgumentException;
 
 class MetaParamController extends Controller
 {
     /**
-     * GET /metas/{meta}/params
-     * Returns the rows of one meta as a nested tree (roots first, children inside).
+     * GET /metas/{meta}/params?effective=1
+     * Returns the rows of one meta as a nested tree (roots first, children inside). With
+     * effective, a datagrid that reuses another gets the params it shows with: its bases'
+     * merged with its own (GridReuse). Without it, only its own, as the builder edits them.
      */
     public function index(Request $request, Meta $meta): JsonResponse
     {
         Access::require($request->user(), $meta, 'view');
 
-        $rows = MetaParam::where('main_meta_id', $meta->id)
-            ->with('links')
-            ->orderBy('order_number')
-            ->get();
+        $rows = $request->boolean('effective') && GridReuse::reuses($meta)
+            ? GridReuse::params($meta)
+            : MetaParam::where('main_meta_id', $meta->id)
+                ->with('links')
+                ->orderBy('order_number')
+                ->get();
 
         // A filter without a lookup or list of its own picks with its form field's (filter_as).
         foreach (FilterLookups::borrowed($meta, $rows) as $field => $formField) {
             $rows->firstWhere('field_path', $field)?->setAttribute('filter_as', FilterLookups::describe($formField));
+        }
+
+        // A screen asks for its labels in the user's language (see Translations).
+        if ($request->boolean('translated')) {
+            Translations::apply($rows, 'meta_params');
         }
 
         return response()->json($this->buildTree($rows));
@@ -113,6 +126,7 @@ class MetaParamController extends Controller
             'display_field' => ['nullable', 'string', 'max:255'],
             'value_field' => ['nullable', 'string', 'max:255'],
             'is_label' => ['sometimes', 'boolean'],
+            'is_parent' => ['sometimes', 'boolean'],
         ]);
 
         // A row can't point at itself as its parent, and no row can be placed under its own descendant.
@@ -123,6 +137,14 @@ class MetaParamController extends Controller
         }
 
         $problem = Autonumber::problem($data['json_config']['autonumber'] ?? null);
+        // A detail's criteria (when a save takes it) must at least read.
+        if ($problem === null && isset($data['json_config']['criteria'])) {
+            try {
+                Criteria::check(is_string($data['json_config']['criteria']) ? $data['json_config']['criteria'] : throw new InvalidArgumentException('The criteria must be text.'));
+            } catch (InvalidArgumentException $e) {
+                $problem = $e->getMessage();
+            }
+        }
         if ($problem !== null) {
             abort(response()->json(['message' => $problem, 'errors' => ['json_config' => [$problem]]], 422));
         }

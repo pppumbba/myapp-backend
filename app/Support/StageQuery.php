@@ -61,7 +61,9 @@ class StageQuery
             }
         } catch (QueryException $e) {
             $n = count($counts) + 1;
-            abort(422, (count($statements) > 1 ? "Statement {$n} " : 'The query ').'could not run: '.($e->errorInfo[2] ?? $e->getPrevious()?->getMessage() ?? 'unknown error').'.');
+            abort(422, count($statements) > 1
+                ? __('Statement :number could not run: :error.', ['number' => $n, 'error' => $e->errorInfo[2] ?? $e->getPrevious()?->getMessage() ?? 'unknown error'])
+                : __('The query could not run: :error.', ['error' => $e->errorInfo[2] ?? $e->getPrevious()?->getMessage() ?? 'unknown error']));
         }
 
         return ['affected' => array_sum($counts), 'statements' => $counts, 'dry_run' => $dryRun];
@@ -80,13 +82,13 @@ class StageQuery
         foreach ($statements as $i => $statement) {
             $label = count($statements) > 1 ? 'Statement '.($i + 1) : 'The query';
             $first = strtolower(strtok($statement, " \t\r\n("));
-            abort_unless(in_array($first, self::STARTS, true), 422, "{$label} must be an INSERT, UPDATE, DELETE or REPLACE.");
+            abort_unless(in_array($first, self::STARTS, true), 422, __(':label must be an INSERT, UPDATE, DELETE or REPLACE.', ['label' => $label]));
             $words = preg_split('/[^a-z0-9_]+/', strtolower(self::unquoted($statement)), -1, PREG_SPLIT_NO_EMPTY);
             if ($blocked = array_values(array_intersect($words, MetaDataController::BLOCKED_TABLES))) {
-                abort(422, "{$label} uses \"{$blocked[0]}\", a system table that stage queries cannot touch.");
+                abort(422, __(':label uses ":table", a system table that stage queries cannot touch.', ['label' => $label, 'table' => $blocked[0]]));
             }
             if ($first === 'with' && ! array_intersect($words, ['insert', 'update', 'delete'])) {
-                abort(422, "{$label} must change data: WITH … then INSERT, UPDATE or DELETE.");
+                abort(422, __(':label must change data: WITH … then INSERT, UPDATE or DELETE.', ['label' => $label]));
             }
         }
 

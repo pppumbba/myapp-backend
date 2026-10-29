@@ -1,0 +1,11 @@
+$kind: http-request
+name: grid data
+method: GET
+url: '{{base_url}}/metas/:meta/data'
+order: 4000
+pathVariables:
+  - key: meta
+    value: '{{meta_id}}'
+headers:
+  - key: Accept
+    value: application/json

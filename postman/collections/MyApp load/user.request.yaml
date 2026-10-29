@@ -1,0 +1,7 @@
+$kind: http-request
+method: GET
+url: '{{base_url}}/user'
+order: 1000
+headers:
+  - key: Accept
+    value: application/json

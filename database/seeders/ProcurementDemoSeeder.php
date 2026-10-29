@@ -82,21 +82,44 @@ class ProcurementDemoSeeder extends Seeder
         });
 
         // The statement, report, Overview dashboard, Excel imports, Welcome page and notifications, each also runnable on its own.
-        $this->call([ProcurementReportsSeeder::class, ProcurementDashboardSeeder::class, ProcurementImportSeeder::class, ProcurementPageSeeder::class, ProcurementNotificationsSeeder::class, ProcurementStageQueriesSeeder::class]);
+        $this->call([ProcurementReportsSeeder::class, ProcurementDashboardSeeder::class, ProcurementImportSeeder::class, ProcurementPageSeeder::class, ProcurementNotificationsSeeder::class, ProcurementStageQueriesSeeder::class, ProcurementQueriesSeeder::class]);
     }
 
     private function metas(): void
     {
         // Forms first, so the grids can point at them.
+        // Payment terms apply only to foreign suppliers (the terms detail's criteria).
+        $foreignType = DB::table('proc_supplier_types')->where('code', 'foreign')->value('id');
+        $typeGrid = $this->meta('proc_supplier_types_grid', 'Supplier types', 'datagrid', 'proc_supplier_types', 'Kinds of supplier.');
+        $this->params($typeGrid, [
+            ['id', 'ID', 'integer', ['is_primary' => true, 'is_show' => false]],
+            ['code', 'Code', 'string'],
+            ['name', 'Name', 'string', ['is_criteria' => true, 'is_label' => true]],
+        ]);
+
+        // One-to-one: each supplier has at most one row of payment terms, edited inside its form.
+        $termsForm = $this->meta('proc_supplier_terms_form', 'Supplier payment terms', 'form', 'proc_supplier_terms', 'How and how much a supplier lets us pay.');
+        $this->params($termsForm, [
+            ['id', 'ID', 'integer', ['is_primary' => true, 'is_show' => false]],
+            ['supplier_id', 'Supplier', 'integer', ['is_show' => false]],
+            ['payment_terms', 'Payment terms', 'string', ['is_required' => true, 'render_type' => 'select', 'default_value' => 'net_30', 'json_config' => ['options' => ['prepaid', 'net_15', 'net_30', 'net_60']]]],
+            ['currency', 'Currency', 'string', ['is_required' => true, 'render_type' => 'select', 'default_value' => 'MNT', 'json_config' => ['options' => ['MNT', 'USD', 'CNY', 'EUR']]]],
+            ['credit_limit', 'Credit limit', 'decimal', ['min_value' => '0', 'render_type' => 'money']],
+            ['tax_number', 'Tax number', 'string'],
+            ['notes', 'Notes', 'text', ['render_type' => 'textarea']],
+        ]);
+
         $supplierForm = $this->meta('proc_supplier_form', 'Supplier form', 'form', 'proc_suppliers', 'Add or edit a supplier.');
         $this->params($supplierForm, [
             ['id', 'ID', 'integer', ['is_primary' => true, 'is_show' => false]],
             ['name', 'Company name', 'string', ['is_required' => true, 'is_criteria' => true]],
+            ['supplier_type_id', 'Type', 'integer', ['is_select' => true, 'ref_meta_id' => $typeGrid->id, 'render_type' => 'lookup', 'display_field' => 'name']],
             ['contact_name', 'Contact person', 'string'],
             ['email', 'Email', 'string', ['render_type' => 'email']],
             ['phone', 'Phone', 'string'],
             ['country', 'Country', 'string'],
             ['is_active', 'Active', 'boolean', ['default_value' => '1']],
+            ['terms', 'Payment terms', 'detail', ['ref_meta_id' => $termsForm->id, 'json_config' => ['foreign_key' => 'supplier_id', 'one' => true, 'criteria' => "supplierTypeId == {$foreignType}"]]],
         ]);
 
         $itemForm = $this->meta('proc_item_form', 'Item form', 'form', 'proc_items', 'Add or edit a catalog item.');
@@ -110,6 +133,8 @@ class ProcurementDemoSeeder extends Seeder
         ]);
 
         $supplierGrid = $this->meta('proc_suppliers_grid', 'Suppliers', 'datagrid', 'proc_suppliers', 'Companies we buy from.');
+        // Numbered rows in a fixed 720×320 px box that scrolls both ways; the company stays in view.
+        $supplierGrid->update(['json_config' => [...($supplierGrid->json_config ?? []), 'row_numbers' => true, 'frozen_columns' => 1, 'height' => 320, 'width' => 720]]);
         $this->actions($supplierGrid, $supplierForm);
         $this->params($supplierGrid, [
             ['id', 'ID', 'integer', ['is_primary' => true, 'is_show' => false]],
@@ -241,15 +266,28 @@ class ProcurementDemoSeeder extends Seeder
         $this->actions($orderGrid, $orderForm, $loadOrder, $newOrder);
         $this->params($orderGrid, [
             ['id', 'ID', 'integer', ['is_primary' => true, 'is_show' => false]],
+            // The footer adds up the orders' totals, over every matching order.
             ['po_number', 'PO number', 'string', ['is_criteria' => true]],
             ['supplier_name', 'Supplier', 'string', ['is_criteria' => true]],
             ['order_date', 'Ordered', 'date'],
             ['expected_date', 'Expected', 'date'],
-            ['total_amount', 'Total', 'decimal', ['render_type' => 'money']],
+            ['total_amount', 'Total', 'decimal', ['render_type' => 'money', 'json_config' => ['aggregate' => 'sum']]],
             ['status_id', 'Status', 'integer', ['is_criteria' => true]],
             ['from_date', 'Ordered from', 'date', ['is_show' => false, 'is_criteria' => true]],
             ['to_date', 'Ordered to', 'date', ['is_show' => false, 'is_criteria' => true]],
         ]);
+
+        // Reuses the orders grid (ref_meta_id): same query, workflow, buttons and footer. Its own
+        // params only change columns: no order date, the expected date as "Due", filterable.
+        $scheduleGrid = $this->meta('proc_order_schedule_grid', 'Delivery schedule', 'datagrid', null, 'Purchase orders by when they are due.', $orderGrid);
+        $scheduleGrid->update(['json_config' => [...($scheduleGrid->json_config ?? []), 'row_numbers' => true]]);
+        $this->params($scheduleGrid, [
+            ['order_date', 'Ordered', 'date', ['is_show' => false]],
+            ['expected_date', 'Due', 'date', ['is_criteria' => true]],
+        ]);
+        // Overrides keep the base column's place.
+        MetaParam::where('main_meta_id', $scheduleGrid->id)->where('field_path', 'order_date')->update(['order_number' => 4]);
+        MetaParam::where('main_meta_id', $scheduleGrid->id)->where('field_path', 'expected_date')->update(['order_number' => 5]);
 
         // Shown under Suppliers: pick a supplier and its orders appear. :supplier_id comes
         // from the picked row (see the subgrid param below) and is required.
@@ -276,7 +314,8 @@ class ProcurementDemoSeeder extends Seeder
             'label_name' => 'Purchase orders',
             'data_type' => 'subgrid',
             'ref_meta_id' => $supplierOrders->id,
-            'json_config' => ['params' => ['supplier_id' => 'id']],
+            // Opens inside each supplier's row (its expand arrow) instead of under the grid.
+            'json_config' => ['params' => ['supplier_id' => 'id'], 'display' => 'nested'],
         ]);
 
         $masterData = $this->meta('proc_master_data', 'Master data', 'tabs', null, 'Suppliers and items in one place.');
@@ -292,6 +331,7 @@ class ProcurementDemoSeeder extends Seeder
                 ['new_request', 'New request', 'string', ['icon_cls' => 'plus', 'ref_meta_id' => $requestForm->id, 'json_config' => ['defaults' => ['needed_by' => '{today}']]]],
                 ['purchase_requests', 'Purchase requests', 'string', ['icon_cls' => 'file', 'ref_meta_id' => $requestTabs->id]],
                 ['purchase_orders', 'Purchase orders', 'string', ['icon_cls' => 'receipt', 'ref_meta_id' => $orderGrid->id]],
+                ['delivery_schedule', 'Delivery schedule', 'string', ['icon_cls' => 'calendar', 'ref_meta_id' => $scheduleGrid->id]],
             ]]],
             ['master_data', 'Master data', 'string', ['icon_cls' => 'database', 'ref_meta_id' => $masterData->id]],
         ]);
@@ -429,6 +469,10 @@ class ProcurementDemoSeeder extends Seeder
     {
         $now = now();
 
+        foreach (['local' => 'Local', 'foreign' => 'Foreign', 'service' => 'Service provider'] as $code => $typeName) {
+            DB::table('proc_supplier_types')->updateOrInsert(['code' => $code], ['name' => $typeName, 'created_at' => $now, 'updated_at' => $now]);
+        }
+
         if (! DB::table('proc_suppliers')->exists()) {
             DB::table('proc_suppliers')->insert(array_map(fn ($s) => $s + ['created_at' => $now, 'updated_at' => $now], [
                 ['name' => 'Nomin Trading LLC', 'contact_name' => 'Bat-Erdene', 'email' => 'sales@nomin-trading.example', 'phone' => '+976 7011 2233', 'country' => 'Mongolia', 'is_active' => true],
@@ -459,6 +503,19 @@ class ProcurementDemoSeeder extends Seeder
                 ['request_no' => 'PR-2026-003', 'title' => 'Paper restock Q4', 'requested_by' => 'Enkhjin', 'department' => 'Operations', 'item_id' => $item['OF-001'], 'quantity' => 20, 'needed_by' => '2026-10-30', 'status' => 'ordered', 'notes' => null],
                 ['request_no' => 'PR-2026-004', 'title' => 'Chairs for meeting room', 'requested_by' => 'Munkh', 'department' => 'HR', 'item_id' => $item['FU-001'], 'quantity' => 10, 'needed_by' => '2026-12-01', 'status' => 'draft', 'notes' => 'Waiting on the room layout.'],
                 ['request_no' => 'PR-2026-005', 'title' => 'Keyboards for sales', 'requested_by' => 'Anu', 'department' => 'Sales', 'item_id' => $item['IT-003'], 'quantity' => 8, 'needed_by' => '2026-11-15', 'status' => 'rejected', 'notes' => 'Use existing stock first.'],
+            ]));
+        }
+
+        // Suppliers outside Mongolia are foreign.
+        $types = DB::table('proc_supplier_types')->pluck('id', 'code');
+        DB::table('proc_suppliers')->whereNull('supplier_type_id')->where('country', 'Mongolia')->update(['supplier_type_id' => $types['local']]);
+        DB::table('proc_suppliers')->whereNull('supplier_type_id')->update(['supplier_type_id' => $types['foreign']]);
+
+        if (! DB::table('proc_supplier_terms')->exists()) {
+            $supplier = DB::table('proc_suppliers')->pluck('id', 'name');
+            DB::table('proc_supplier_terms')->insert(array_map(fn ($t) => $t + ['created_at' => $now, 'updated_at' => $now], [
+                ['supplier_id' => $supplier['Nomin Trading LLC'], 'payment_terms' => 'net_30', 'currency' => 'MNT', 'credit_limit' => 50000000, 'tax_number' => '5123456', 'notes' => null],
+                ['supplier_id' => $supplier['Northwind Electronics'], 'payment_terms' => 'prepaid', 'currency' => 'USD', 'credit_limit' => null, 'tax_number' => null, 'notes' => 'Pays before shipping.'],
             ]));
         }
 

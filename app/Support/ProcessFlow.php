@@ -94,7 +94,7 @@ class ProcessFlow
                 return (object) ($values + ['affected' => StageQuery::run($step->process, $values, $actor)['affected']]);
             }
 
-            return MetaDataController::storeAs($actor, $step->process, $values);
+            return RecordLog::as('process_flow', fn () => MetaDataController::storeAs($actor, $step->process, $values));
         } catch (Throwable $e) {
             abort(422, "{$step->process->name}: ".MetaDataController::failure($e));
         } finally {

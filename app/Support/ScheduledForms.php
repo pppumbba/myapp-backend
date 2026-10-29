@@ -84,7 +84,7 @@ class ScheduledForms
                     if ($isQuery) {
                         $result['affected'] = ($result['affected'] ?? 0) + StageQuery::run($link->process, $payload, $runner)['affected'];
                     } else {
-                        MetaDataController::storeAs($runner, $link->process, $payload);
+                        RecordLog::as('schedule', fn () => MetaDataController::storeAs($runner, $link->process, $payload));
                     }
                     $result['created']++;
                 } catch (Throwable $e) {
@@ -129,7 +129,7 @@ class ScheduledForms
         $viewColumns = MetaParam::where('main_meta_id', $link->view_id)->pluck('field_path')->all();
 
         return $params
-            ->reject(fn (MetaParam $p) => $p->field_path === $key || in_array($p->data_type, ['detail', 'subgrid'], true))
+            ->reject(fn (MetaParam $p) => $p->field_path === $key || in_array($p->data_type, ['detail', 'subgrid', 'singlefile', 'multifile', 'document'], true))
             ->pluck('field_path')
             ->intersect($viewColumns)
             ->values()

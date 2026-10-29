@@ -159,7 +159,7 @@ class ExternalServiceTest extends TestCase
     public function test_only_admins_see_the_headers_and_metadata_addresses_are_refused(): void
     {
         $this->getJson("/api/metas/{$this->meta->id}")->assertOk()->assertJsonPath('service_headers', fn ($h) => str_contains($h, 'SERVICE_TEST_TOKEN'));
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs($this->allow(User::factory()->create(), [$this->meta->id]));
         $this->getJson("/api/metas/{$this->meta->id}")->assertOk()->assertJsonMissingPath('service_headers');
 
         Sanctum::actingAs(User::factory()->admin()->create());

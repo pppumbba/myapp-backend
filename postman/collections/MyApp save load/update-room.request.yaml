@@ -1,0 +1,27 @@
+$kind: http-request
+name: update room
+method: PUT
+url: '{{base_url}}/metas/:meta/data/:id'
+order: 2000
+pathVariables:
+  - key: meta
+    value: '{{room_form}}'
+  - key: id
+    value: '{{room_id}}'
+headers:
+  - key: Accept
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "LOADTEST {{$randomUUID}}",
+      "floor": "2",
+      "capacity": 12,
+      "is_active": false
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('updated', () => pm.response.to.have.status(200));

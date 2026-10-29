@@ -33,6 +33,7 @@ class NotificationRuleController extends Controller
             'title' => $message['title'],
             'body' => $message['body'],
             'link' => $message['link'],
+            'email' => Notifier::emails($meta),
             'recipient_count' => $message['recipients']->count(),
             'recipients' => $message['recipients']->take(20)->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email])->values(),
         ]);
@@ -61,7 +62,8 @@ class NotificationRuleController extends Controller
             UserNotification::where('notification_meta_id', $meta->id)
                 ->join('users', 'users.id', '=', 'user_notifications.user_id')
                 ->latest('user_notifications.id')->limit(25)
-                ->get(['user_notifications.id', 'user_notifications.title', 'user_notifications.read_at', 'user_notifications.created_at', 'users.name as user_name'])
+                ->get(['user_notifications.id', 'user_notifications.title', 'user_notifications.read_at', 'user_notifications.created_at',
+                    'user_notifications.email_status', 'user_notifications.email_error', 'users.name as user_name'])
         );
     }
 
