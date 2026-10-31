@@ -3,12 +3,26 @@
 use App\Http\Controllers\Api\V1\AccessController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChartController;
+use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\ContentController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\ExcelImportController;
 use App\Http\Controllers\Api\V1\ExcelStructureController;
 use App\Http\Controllers\Api\V1\GoogleAuthController;
 use App\Http\Controllers\Api\V1\LanguageController;
+use App\Http\Controllers\Api\V1\Market\BidController;
+use App\Http\Controllers\Api\V1\Market\CategoryController;
+use App\Http\Controllers\Api\V1\Market\CompanyController;
+use App\Http\Controllers\Api\V1\Market\ContractController;
+use App\Http\Controllers\Api\V1\Market\DanController;
+use App\Http\Controllers\Api\V1\Market\EscrowController;
+use App\Http\Controllers\Api\V1\Market\EvaluationController;
+use App\Http\Controllers\Api\V1\Market\FeeController;
+use App\Http\Controllers\Api\V1\Market\NegotiationController;
+use App\Http\Controllers\Api\V1\Market\PaymentController;
+use App\Http\Controllers\Api\V1\Market\ReviewController;
+use App\Http\Controllers\Api\V1\Market\TenderApplicationController;
+use App\Http\Controllers\Api\V1\Market\TenderController;
 use App\Http\Controllers\Api\V1\MatrixController;
 use App\Http\Controllers\Api\V1\MetaActionController;
 use App\Http\Controllers\Api\V1\MetaController;
@@ -32,6 +46,7 @@ use App\Http\Controllers\Api\V1\RecordLogController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\RoleWorkspaceController;
 use App\Http\Controllers\Api\V1\ScheduleController;
+use App\Http\Controllers\Api\V1\ScreenController;
 use App\Http\Controllers\Api\V1\SessionValueController;
 use App\Http\Controllers\Api\V1\SiteController;
 use App\Http\Controllers\Api\V1\StageQueryController;
@@ -53,15 +68,105 @@ Route::post('/auth/google/exchange', [GoogleAuthController::class, 'exchange'])-
 // Attached files: public ones open for anyone, the rest check the token (ContentController).
 Route::get('/contents/{content}', [ContentController::class, 'show'])->whereNumber('content')->middleware('throttle:120,1');
 
+// The payment provider tells us an invoice changed; we ask the provider again rather than trust it.
+Route::match(['get', 'post'], '/market/payments/{payment}/callback', [PaymentController::class, 'callback'])->whereNumber('payment')->middleware('throttle:60,1');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/meta-types', [MetaTypeController::class, 'index']);
     Route::get('/metas/options', [MetaController::class, 'options']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    // The market: verifying people (DAN) and the companies they act for (ХУР).
+    Route::post('/market/dan/start', [DanController::class, 'start'])->middleware('throttle:login');
+    Route::get('/market/me', [DanController::class, 'me']);
+    Route::post('/market/companies', [CompanyController::class, 'store']);
+    Route::post('/market/companies/{company}/representations', [CompanyController::class, 'requestRepresentation'])->whereNumber('company');
+    Route::get('/market/companies/{company}/members', [CompanyController::class, 'members'])->whereNumber('company');
+    Route::patch('/market/companies/{company}/members/{member}', [CompanyController::class, 'updateMember'])->whereNumber(['company', 'member']);
+    Route::delete('/market/companies/{company}/members/{member}', [CompanyController::class, 'removeMember'])->whereNumber(['company', 'member']);
+    Route::post('/market/companies/{company}/invites', [CompanyController::class, 'invite'])->whereNumber('company');
+    Route::post('/market/invites/{token}/accept', [CompanyController::class, 'acceptInvite'])->middleware('throttle:30,1');
+    Route::get('/market/approvals/{token}', [CompanyController::class, 'approval'])->middleware('throttle:60,1');
+    Route::post('/market/approvals/{token}', [CompanyController::class, 'decideApproval'])->middleware('throttle:30,1');
+    Route::get('/market/reviews', [ReviewController::class, 'index']);
+    Route::get('/market/reviews/{representation}/file', [ReviewController::class, 'file'])->whereNumber('representation');
+    Route::post('/market/reviews/{representation}/decide', [ReviewController::class, 'decide'])->whereNumber('representation');
+    Route::get('/screens', [ScreenController::class, 'index']);
+    Route::get('/market/categories', [CategoryController::class, 'index']);
+    Route::post('/market/categories/{category}/follow', [CategoryController::class, 'follow']);
+    Route::delete('/market/categories/{category}/follow', [CategoryController::class, 'unfollow']);
+    Route::get('/market/tenders', [TenderController::class, 'index']);
+    Route::get('/market/tenders/mine', [TenderController::class, 'mine']);
+    Route::post('/market/tenders', [TenderController::class, 'store']);
+    Route::get('/market/tenders/{tender}', [TenderController::class, 'show']);
+    Route::put('/market/tenders/{tender}', [TenderController::class, 'update']);
+    Route::post('/market/tenders/{tender}/publish', [TenderController::class, 'publish']);
+    Route::post('/market/tenders/{tender}/cancel', [TenderController::class, 'cancel']);
+    Route::post('/market/tenders/{tender}/files', [TenderController::class, 'addFile']);
+    Route::post('/market/tenders/{tender}/bids', [BidController::class, 'store']);
+    Route::get('/market/bids', [BidController::class, 'index']);
+    Route::get('/market/bids/{bid}', [BidController::class, 'show']);
+    Route::post('/market/bids/{bid}/withdraw', [BidController::class, 'withdraw']);
+    Route::get('/market/bids/{bid}/files/{content}', [BidController::class, 'file']);
+    Route::get('/market/tenders/{tender}/evaluation', [EvaluationController::class, 'show']);
+    Route::post('/market/tenders/{tender}/evaluation/start', [EvaluationController::class, 'start']);
+    Route::post('/market/bid-specs/{answer}/override', [EvaluationController::class, 'override']);
+    Route::post('/market/tenders/{tender}/award', [EvaluationController::class, 'award']);
+    Route::post('/market/bids/{bid}/overturn', [EvaluationController::class, 'overturn']);
+    Route::post('/market/tenders/{tender}/shortlist', [NegotiationController::class, 'shortlist']);
+    Route::post('/market/tenders/{tender}/final-round', [NegotiationController::class, 'finalRound']);
+    Route::post('/market/tenders/{tender}/finish-negotiation', [NegotiationController::class, 'finish']);
+    Route::get('/market/bids/{bid}/messages', [NegotiationController::class, 'messages']);
+    Route::post('/market/bids/{bid}/messages', [NegotiationController::class, 'message']);
+    Route::post('/market/bids/{bid}/revise', [NegotiationController::class, 'revise']);
+    Route::get('/market/tenders/{tender}/applications', [TenderApplicationController::class, 'index']);
+    Route::post('/market/tenders/{tender}/applications', [TenderApplicationController::class, 'store']);
+    Route::post('/market/tender-applications/{application}/decide', [TenderApplicationController::class, 'decide']);
+    Route::get('/market/tender-applications/{application}/files/{content}', [TenderApplicationController::class, 'file']);
+    Route::get('/market/tender-files/{file}', [TenderController::class, 'file']);
+    Route::delete('/market/tender-files/{file}', [TenderController::class, 'deleteFile']);
+    Route::get('/market/fees', [FeeController::class, 'index']);
+    Route::put('/market/fees', [FeeController::class, 'update']);
+    Route::get('/market/contracts', [ContractController::class, 'index']);
+    Route::post('/market/contracts', [ContractController::class, 'store']);
+    Route::get('/market/contracts/{contract}', [ContractController::class, 'show'])->whereNumber('contract');
+    Route::put('/market/contracts/{contract}', [ContractController::class, 'update'])->whereNumber('contract');
+    Route::post('/market/contracts/{contract}/cancel', [ContractController::class, 'cancel'])->whereNumber('contract');
+    Route::post('/market/contracts/{contract}/sign', [ContractController::class, 'sign'])->whereNumber('contract');
+    foreach (['start', 'deliver', 'confirm', 'reject', 'rate'] as $action) {
+        Route::post("/market/contracts/{contract}/{$action}", [ContractController::class, $action])->whereNumber('contract');
+    }
+    Route::get('/market/contracts/{contract}/pdf', [ContractController::class, 'pdf'])->whereNumber('contract');
+    Route::post('/market/contracts/{contract}/disputes', [EscrowController::class, 'openDispute'])->whereNumber('contract');
+    Route::post('/market/contract-steps/{step}/fund', [EscrowController::class, 'fund'])->whereNumber('step');
+    Route::post('/market/contract-steps/{step}/request', [EscrowController::class, 'request'])->whereNumber('step');
+    Route::post('/market/contract-steps/{step}/release', [EscrowController::class, 'release'])->whereNumber('step');
+    Route::post('/market/contract-steps/{step}/reject-release', [EscrowController::class, 'rejectRelease'])->whereNumber('step');
+    Route::get('/market/disputes', [EscrowController::class, 'disputes']);
+    Route::post('/market/disputes/{dispute}/decide', [EscrowController::class, 'decide'])->whereNumber('dispute');
+    Route::get('/market/payments', [PaymentController::class, 'index']);
+    Route::get('/market/payments/{payment}', [PaymentController::class, 'show'])->whereNumber('payment');
+    Route::get('/market/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->whereNumber('payment');
+
     // The signed-in user's own profile.
     Route::get('/user', [ProfileController::class, 'show']);
     Route::put('/user', [ProfileController::class, 'update']);
     Route::put('/user/theme', [ThemeController::class, 'mine']);
+    Route::put('/user/preferences', [ProfileController::class, 'preferences']);
+
+    // The messenger (polled; see ChatController).
+    Route::get('/chats/poll', [ChatController::class, 'poll']);
+    Route::get('/chats/people', [ChatController::class, 'people']);
+    Route::get('/chats/search', [ChatController::class, 'search']);
+    Route::post('/chats/direct', [ChatController::class, 'direct']);
+    Route::post('/chats', [ChatController::class, 'store']);
+    Route::put('/chats/{chat}', [ChatController::class, 'update'])->whereNumber('chat');
+    Route::get('/chats/{chat}/messages', [ChatController::class, 'messages'])->whereNumber('chat');
+    Route::post('/chats/{chat}/messages', [ChatController::class, 'send'])->whereNumber('chat');
+    Route::post('/chats/{chat}/read', [ChatController::class, 'read'])->whereNumber('chat');
+    Route::post('/chats/{chat}/typing', [ChatController::class, 'typing'])->whereNumber('chat');
+    Route::post('/chats/{chat}/members', [ChatController::class, 'addMembers'])->whereNumber('chat');
+    Route::delete('/chats/{chat}/members/me', [ChatController::class, 'leave'])->whereNumber('chat');
     Route::put('/user/locale', [LanguageController::class, 'mine']);
     Route::get('/languages', [LanguageController::class, 'index']);
     Route::post('/languages', [LanguageController::class, 'store']);

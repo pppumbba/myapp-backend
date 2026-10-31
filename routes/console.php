@@ -1,7 +1,11 @@
 <?php
 
+use App\Models\Company;
 use App\Models\Schedule as ScheduleModel;
 use App\Support\Contents;
+use App\Support\Market\Companies;
+use App\Support\Market\Escrow;
+use App\Support\Market\Tenders;
 use App\Support\ScheduledForms;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -45,3 +49,26 @@ Artisan::command('contents:prune', function () {
 })->purpose('Delete uploads never saved to a record');
 
 Schedule::command('contents:prune')->daily();
+
+/** Reads market companies from ХУР again: a liquidated one is frozen. Each is looked at weekly. */
+Artisan::command('market:recheck-companies', function () {
+    $due = Company::where('checked_at', '<', now()->subDays(7))->orderBy('checked_at')->limit(200)->get();
+    $changed = $due->filter(fn (Company $company) => Companies::recheck($company))->count();
+    $this->line("{$due->count()} companies checked, {$changed} changed.");
+})->purpose('Check market companies against ХУР again');
+
+Schedule::command('market:recheck-companies')->daily();
+
+/** Pays out escrow steps the vendor asked for and the buyer left unanswered; frozen ones wait. */
+Artisan::command('market:release-due', function () {
+    $this->line(Escrow::autoRelease().' payment steps released.');
+})->purpose('Release requested escrow steps whose wait is over');
+
+Schedule::command('market:release-due')->hourly();
+
+/** Closes tenders past their close date and ends final-offer rounds past theirs. */
+Artisan::command('market:close-tenders', function () {
+    $this->line(Tenders::closeDue().' tenders moved.');
+})->purpose('Close tenders and final rounds whose time is up');
+
+Schedule::command('market:close-tenders')->everyMinute()->withoutOverlapping();

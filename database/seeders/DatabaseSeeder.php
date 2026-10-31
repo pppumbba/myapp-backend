@@ -27,5 +27,6 @@ class DatabaseSeeder extends Seeder
         // Published as the administrator above.
         $this->call(WebsiteDemoSeeder::class);
         $this->call(ClimbingDemoSeeder::class);
+        $this->call(MarketAppSeeder::class);
     }
 }

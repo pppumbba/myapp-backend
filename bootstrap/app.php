@@ -18,6 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectGuestsTo(fn () => null);
+        // Behind Render's (or any) proxy: https and the real host come from X-Forwarded-* headers.
+        $middleware->trustProxies(at: '*');
         $middleware->alias(['meta.version' => SavesMetaVersion::class, 'auth.optional' => AuthenticateOptionally::class]);
         $middleware->api(append: SetLocale::class);
     })

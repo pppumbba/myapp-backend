@@ -32,6 +32,20 @@ class ProfileTest extends TestCase
             ->assertJsonValidationErrors(['email']);
     }
 
+    public function test_preferences_merge_and_only_known_keys_are_kept(): void
+    {
+        $user = User::factory()->create(['preferences' => ['other' => 1]]);
+        $auth = $this->signIn($user);
+
+        $this->putJson('/api/user/preferences', ['form_saved_notice' => true, 'unknown' => 'x'], $auth)
+            ->assertOk()
+            ->assertJsonPath('preferences.form_saved_notice', true)
+            ->assertJsonPath('preferences.other', 1)
+            ->assertJsonMissingPath('preferences.unknown');
+
+        $this->putJson('/api/user/preferences', ['form_saved_notice' => 'maybe'], $auth)->assertUnprocessable();
+    }
+
     public function test_password_change_needs_the_current_password_and_signs_out_other_sessions(): void
     {
         $user = User::factory()->create(['password' => Hash::make('old-password')]);

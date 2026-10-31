@@ -18,8 +18,9 @@ use Illuminate\Support\Str;
  * Website metas. json_config.site holds the site's settings (title, tagline, logo, theme,
  * footer, language); its params are its pages: ref_meta_id the page meta, parent_id the page
  * it sits under (its address continues the parent's), label_name what the menu says, is_show
- * whether the menu shows it, json_config {slug, title, description, image} the address part
- * and what search engines and shared links show. The top page with an empty slug is the home
+ * whether the header's menu shows it, json_config {slug, title, description, image, in_footer}
+ * the address part, what search engines and shared links show, and whether the footer lists
+ * it (left out: as in the header). The top page with an empty slug is the home
  * page. site_domains are the hosts it answers on.
  *
  * Pages are edited in the page builder as drafts; visitors see what was published
@@ -30,12 +31,15 @@ class Sites
     public const TYPE = 'website';
 
     /** The site's settings, each filled in. */
-    public const BASE = ['title' => null, 'tagline' => null, 'description' => null, 'logo' => null, 'theme_meta_id' => null, 'look' => SiteLooks::DEFAULT, 'brand_accent' => true, 'header' => 'masthead', 'announcement' => null, 'footer_style' => 'letter', 'footer' => null, 'lang' => 'en'];
+    public const BASE = ['title' => null, 'tagline' => null, 'description' => null, 'logo' => null, 'theme_meta_id' => null, 'look' => SiteLooks::DEFAULT, 'brand_accent' => true, 'header' => 'masthead', 'announcement' => null, 'footer_style' => 'letter', 'footer' => null, 'lang' => 'en', 'social' => []];
 
     /** How a site's header and footer are laid out (SiteView). */
     public const HEADERS = ['masthead', 'edge', 'pill', 'slab', 'banner'];
 
     public const FOOTERS = ['letter', 'mast', 'statement', 'colophon', 'columns'];
+
+    /** Social networks a site can link to (settings.social: network => address), in the order they show. */
+    public const SOCIALS = ['instagram', 'facebook', 'youtube', 'tiktok', 'x', 'linkedin'];
 
     /** Visits from these aren't counted. */
     private const BOTS = '/bot|crawl|spider|slurp|preview|monitor|curl|wget|headless|lighthouse/i';
@@ -58,8 +62,16 @@ class Sites
         $settings['brand_accent'] = (bool) $settings['brand_accent'];
         $settings['header'] = in_array($settings['header'], self::HEADERS, true) ? $settings['header'] : 'masthead';
         $settings['footer_style'] = in_array($settings['footer_style'], self::FOOTERS, true) ? $settings['footer_style'] : 'letter';
+        $social = is_array($settings['social']) ? $settings['social'] : [];
+        $settings['social'] = array_filter(array_map(fn ($network) => self::text($social[$network] ?? null), array_combine(self::SOCIALS, self::SOCIALS)));
 
         return $settings;
+    }
+
+    /** Whether the footer lists a page: its own in_footer, else as the header does. */
+    public static function inFooter(MetaParam $entry): bool
+    {
+        return (bool) ($entry->json_config['in_footer'] ?? $entry->is_show);
     }
 
     /** @return Collection<int, MetaParam> */
@@ -170,6 +182,7 @@ class Sites
                 'page' => $pages->get($e->ref_meta_id)?->only(['id', 'code', 'name']),
                 'label' => $e->label_name,
                 'in_menu' => (bool) $e->is_show,
+                'in_footer' => self::inFooter($e),
                 'slug' => (string) ($e->json_config['slug'] ?? ''),
                 'title' => self::text($e->json_config['title'] ?? null),
                 'description' => self::text($e->json_config['description'] ?? null),
@@ -198,7 +211,7 @@ class Sites
     /**
      * Saves the site's name, settings, domains and pages in one go (run it in a transaction).
      * pages: [{param_id?, page_meta_id? | new_page?, label, slug, title?, description?, image?,
-     * in_menu?, children?}]; a page left out leaves the site (its page meta stays). new_page
+     * in_menu?, in_footer?, children?}]; a page left out leaves the site (its page meta stays). new_page
      * makes an empty page meta to design in the page builder.
      *
      * @param  array{name?: string, site?: array, domains?: array, pages?: array}  $input
@@ -315,7 +328,10 @@ class Sites
      * (null when there's none there). With $draft (admins previewing), pages show as they are
      * in the builder and every page is in the menu.
      *
-     * @return array{site: array, nav: array, page: ?array}
+     * nav is the header's menu and footer_nav the footer's, both nested; the page lists the
+     * pages under it (children) for its "in this section" list.
+     *
+     * @return array{site: array, nav: array, footer_nav: array, page: ?array}
      */
     public static function page(Meta $site, string $path, ?User $draftFor = null): array
     {
@@ -328,12 +344,21 @@ class Sites
         $page = null;
         if ($paramId !== false) {
             $snapshot = $draftFor ? self::snapshot($entries->firstWhere('id', $paramId), $draftFor) : $live[$paramId]->snapshot;
-            $page = ['path' => $path] + $snapshot;
+            $children = $entries->filter(fn (MetaParam $e) => $e->parent_id === $paramId && isset($live[$e->id]))
+                ->map(function (MetaParam $e) use ($paths, $live, $draftFor) {
+                    $config = $draftFor ? ($e->json_config ?? []) : (array) $live[$e->id]->snapshot;
+
+                    return ['label' => $e->label_name ?: (string) ($config['title'] ?? $paths[$e->id]), 'path' => $paths[$e->id], 'description' => self::text($config['description'] ?? null)];
+                })->values()->all();
+            $page = ['path' => $path] + $snapshot + ['children' => $children];
         }
         $settings = self::settings($site);
-        $menu = $entries->filter(fn (MetaParam $e) => $e->is_show && isset($live[$e->id]))
-            ->map(fn (MetaParam $e) => ['param_id' => $e->id, 'parent_id' => $e->parent_id, 'label' => $e->label_name ?: $paths[$e->id], 'path' => $paths[$e->id]])
-            ->values()->all();
+        $menu = fn (callable $shows) => array_map(
+            fn ($n) => array_diff_key($n, ['param_id' => 1, 'parent_id' => 1]),
+            self::nest($entries->filter(fn (MetaParam $e) => $shows($e) && isset($live[$e->id]))
+                ->map(fn (MetaParam $e) => ['param_id' => $e->id, 'parent_id' => $e->parent_id, 'label' => $e->label_name ?: $paths[$e->id], 'path' => $paths[$e->id]])
+                ->values()->all(), null),
+        );
 
         return [
             'site' => [
@@ -345,7 +370,8 @@ class Sites
                 'theme' => self::theme($settings['theme_meta_id']),
                 'host' => SiteDomain::where('site_meta_id', $site->id)->orderByDesc('is_primary')->orderBy('id')->value('host'),
             ],
-            'nav' => array_map(fn ($n) => array_diff_key($n, ['param_id' => 1, 'parent_id' => 1]), self::nest($menu, null)),
+            'nav' => $menu(fn (MetaParam $e) => $e->is_show),
+            'footer_nav' => $menu(fn (MetaParam $e) => self::inFooter($e)),
             'page' => $page,
         ];
     }
@@ -475,6 +501,14 @@ class Sites
         abort_unless(in_array($settings['header'], self::HEADERS, true), 422, __('":value" isn\'t a header style.', ['value' => $settings['header']]));
         $settings['footer_style'] = self::text($input['footer_style'] ?? null) ?? 'letter';
         abort_unless(in_array($settings['footer_style'], self::FOOTERS, true), 422, __('":value" isn\'t a footer style.', ['value' => $settings['footer_style']]));
+        $social = is_array($input['social'] ?? null) ? $input['social'] : [];
+        foreach (self::SOCIALS as $network) {
+            $url = self::text($social[$network] ?? null);
+            abort_if($url && ! preg_match('#^https?://\S+$#i', $url), 422, __('The :network link must be a web address starting with https://.', ['network' => ucfirst($network)]));
+            if ($url) {
+                $settings['social'][$network] = $url;
+            }
+        }
         if (! empty($input['theme_meta_id'])) {
             $theme = Meta::whereKey((int) $input['theme_meta_id'])->where('type_id', MetaType::where('code', 'theme')->value('id'))->exists();
             abort_unless($theme, 422, 'Pick a theme meta for the site\'s look.');
@@ -557,6 +591,7 @@ class Sites
                         'title' => self::text($item['title'] ?? null),
                         'description' => self::text($item['description'] ?? null),
                         'image' => self::text($item['image'] ?? null),
+                        'in_footer' => isset($item['in_footer']) ? (bool) $item['in_footer'] : null,
                     ], fn ($v) => $v !== null),
                 ];
                 $param ? $param->update($fields) : $param = MetaParam::create($fields);

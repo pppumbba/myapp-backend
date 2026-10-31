@@ -14,6 +14,9 @@ use Illuminate\Database\Eloquent\Builder;
  * other way round: a status with no rows is open, and once it has rows a role is needed,
  * separately for moving records in (can_enter) and seeing them (can_see).
  *
+ * An open meta (is_open) may be viewed by every signed-in user, no role needed, e.g. the market
+ * app and its screens.
+ *
  * A public meta (is_public) may also be opened and added to by anyone, signed in or not, e.g.
  * a portal's screens. Its records can be read only through grids, never through a form, so
  * what one visitor sends through a public form stays hidden from the next.
@@ -36,6 +39,9 @@ class Access
             return true;
         }
         if (in_array($ability, self::PUBLIC_ABILITIES, true) && self::isPublic($meta)) {
+            return true;
+        }
+        if ($user && $ability === 'view' && self::isOpen($meta)) {
             return true;
         }
 
@@ -77,6 +83,12 @@ class Access
         return $meta instanceof Meta ? (bool) $meta->is_public : Meta::whereKey($meta)->where('is_public', true)->exists();
     }
 
+    /** An open meta (is_open) may be viewed by every signed-in user. */
+    private static function isOpen(Meta|int $meta): bool
+    {
+        return $meta instanceof Meta ? (bool) $meta->is_open : Meta::whereKey($meta)->where('is_open', true)->exists();
+    }
+
     /** Stops with 403 unless the user may do this with the meta; a guest gets 401, as signing in may help. */
     public static function require(?User $user, Meta|int $meta, string $ability): void
     {
@@ -98,8 +110,10 @@ class Access
         }
         $roles = $user?->roleIds() ?? [];
 
-        return $query->where(fn ($q) => $q->where('metas.is_public', true)->orWhereExists(fn ($p) => $p->from('meta_permissions')
-            ->whereColumn('meta_permissions.meta_id', 'metas.id')->whereIn('role_id', $roles)->where('can_view', true)));
+        return $query->where(fn ($q) => $q->where('metas.is_public', true)
+            ->when($user, fn ($q) => $q->orWhere('metas.is_open', true))
+            ->orWhereExists(fn ($p) => $p->from('meta_permissions')
+                ->whereColumn('meta_permissions.meta_id', 'metas.id')->whereIn('role_id', $roles)->where('can_view', true)));
     }
 
     /**
@@ -121,6 +135,11 @@ class Access
         }
         foreach (Meta::where('is_public', true)->pluck('id') as $metaId) {
             $rules[$metaId] = array_merge($rules[$metaId] ?? array_fill_keys(MetaPermission::ABILITIES, false), array_fill_keys(self::PUBLIC_ABILITIES, true));
+        }
+        if ($user) {
+            foreach (Meta::where('is_open', true)->pluck('id') as $metaId) {
+                $rules[$metaId] = array_merge($rules[$metaId] ?? array_fill_keys(MetaPermission::ABILITIES, false), ['view' => true]);
+            }
         }
 
         return $rules;

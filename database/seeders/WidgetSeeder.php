@@ -116,6 +116,11 @@ class WidgetSeeder extends Seeder
                     ['key' => 'text', 'label' => 'Text', 'type' => 'textarea'],
                 ]],
             ]],
+            ['social', 'Social links', 'Content', 'social', 'share', 'The website\'s Instagram, Facebook and other pages, set under the site\'s Settings.', [
+                ['key' => 'title', 'label' => 'Title', 'type' => 'text'],
+                ['key' => 'labels', 'label' => 'Show names next to the icons', 'type' => 'boolean', 'default' => true],
+                $align,
+            ]],
             ['quote', 'Quote', 'Content', 'quote', 'quote', 'Words someone really said, with their name.', [
                 ['key' => 'text', 'label' => 'Quote', 'type' => 'textarea'],
                 ['key' => 'name', 'label' => 'Who said it', 'type' => 'text'],

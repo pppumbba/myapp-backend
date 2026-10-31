@@ -126,6 +126,7 @@ class MetaController extends Controller
             'is_active' => ['sometimes', 'boolean'],
             'is_log' => ['sometimes', 'boolean'],
             'is_public' => ['sometimes', 'boolean'],
+            'is_open' => ['sometimes', 'boolean'],
             'type_id' => ['nullable', 'integer', 'exists:meta_types,id'],
             'ref_meta_id' => ['nullable', 'integer', 'exists:metas,id'],
             // A widget meta's library entry (see Widget).

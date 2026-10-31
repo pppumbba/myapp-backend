@@ -23,7 +23,7 @@ class Widget extends Model
     public const RENDERERS = [
         'section', 'divider', 'spacer', 'heading', 'text', 'image', 'callout', 'button',
         'links', 'stat', 'hero', 'list', 'meta', 'chart', 'iframe', 'composite', 'records',
-        'photo', 'table', 'schedule', 'carousel', 'gallery', 'accordion', 'collapse', 'tabs', 'quote', 'webform',
+        'photo', 'table', 'schedule', 'carousel', 'gallery', 'accordion', 'collapse', 'tabs', 'quote', 'webform', 'social',
     ];
 
     public const CONTAINERS = ['section'];

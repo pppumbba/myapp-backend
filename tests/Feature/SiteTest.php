@@ -218,6 +218,54 @@ class SiteTest extends TestCase
             ->assertJsonPath('site.footer_style', 'columns');
     }
 
+    public function test_the_header_and_footer_list_pages_each_on_its_own_and_a_page_lists_those_under_it(): void
+    {
+        // Pages without their own footer switch are listed as in the header.
+        $home = $this->visit('/')->assertOk();
+        $this->assertSame($home->json('nav'), $home->json('footer_nav'));
+
+        Sanctum::actingAs($this->admin);
+        $site = $this->site();
+        $pages = collect($this->getJson("/api/sites/{$site->id}")->json('pages'))->map(fn ($p) => match ($p['slug']) {
+            'contact' => [...$p, 'in_menu' => true, 'in_footer' => false],
+            'about' => [...$p, 'in_menu' => false, 'in_footer' => true, 'children' => [['label' => 'Our Team', 'new_page' => true, 'description' => 'Who answers the phone.']]],
+            default => $p,
+        })->all();
+        $saved = $this->putJson("/api/sites/{$site->id}", ['pages' => $pages])->assertOk();
+        $about = collect($saved->json('pages'))->firstWhere('slug', 'about');
+        $this->assertFalse($about['in_menu']);
+        $this->assertTrue($about['in_footer']);
+
+        $home = $this->visit('/');
+        $this->assertSame(['/', '/contact'], array_column($home->json('nav'), 'path'));
+        $this->assertSame(['/', '/about'], array_column($home->json('footer_nav'), 'path'));
+
+        // The new page isn't published, so only the preview lists it under About.
+        $this->visit('/about')->assertJsonPath('page.children', []);
+        $this->getJson("/api/sites/{$site->id}/preview?path=/about")->assertOk()
+            ->assertJsonPath('page.children.0', ['label' => 'Our Team', 'path' => '/about/our-team', 'description' => 'Who answers the phone.']);
+    }
+
+    public function test_a_site_links_to_its_social_pages_and_the_social_widget_needs_some(): void
+    {
+        Sanctum::actingAs($this->admin);
+        $site = $this->site();
+        $this->visit('/')->assertJsonPath('site.social', []);
+        $this->place('about', 'social', []);
+        $check = $this->getJson("/api/sites/{$site->id}/pages/{$this->entry('about')->id}/check")->assertOk();
+        $this->assertContains('placeholder', array_column($check->json('issues'), 'code'));
+
+        $this->putJson("/api/sites/{$site->id}", ['site' => ['title' => 'Northwind Supply', 'social' => ['instagram' => 'instagram.com/northwind']]])->assertStatus(422);
+        $this->putJson("/api/sites/{$site->id}", ['site' => ['title' => 'Northwind Supply', 'social' => [
+            'facebook' => ' https://facebook.com/northwind ', 'youtube' => '', 'instagram' => 'https://instagram.com/northwind', 'myspace' => 'https://myspace.com/northwind',
+        ]]])->assertOk();
+
+        $social = $this->visit('/')->json('site.social');
+        $this->assertSame(['instagram' => 'https://instagram.com/northwind', 'facebook' => 'https://facebook.com/northwind'], $social);
+        $check = $this->getJson("/api/sites/{$site->id}/pages/{$this->entry('about')->id}/check")->assertOk();
+        $this->assertNotContains('placeholder', array_column($check->json('issues'), 'code'));
+    }
+
     public function test_admins_manage_pages_and_domains_and_others_cannot(): void
     {
         Sanctum::actingAs($this->admin);

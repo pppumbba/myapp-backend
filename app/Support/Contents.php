@@ -303,6 +303,11 @@ class Contents
     {
         return self::prune(Content::where('created_at', '<', now()->subDay())
             ->whereNotExists(fn ($q) => $q->from('content_map')->whereColumn('content_map.content_id', 'contents.id'))
+            // Powers of attorney are held by their market request, not by a form's record.
+            ->whereNotExists(fn ($q) => $q->from('representation_requests')->whereColumn('representation_requests.content_id', 'contents.id'))
+            // Market files (tender documents, datasheets, prequalification papers) are saved with
+            // the row that holds them, under market/, never through content_map.
+            ->where('physical_path', 'not like', 'market/%')
             ->pluck('id')->all());
     }
 

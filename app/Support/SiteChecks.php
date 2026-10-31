@@ -85,9 +85,12 @@ class SiteChecks
                 'chart', 'meta', 'records', 'schedule', 'webform' => ! ((int) ($v['meta_id'] ?? 0) > 0),
                 'links' => collect($v['items'] ?? [])->filter(fn ($l) => self::str($l['label'] ?? null) !== '')->isEmpty(),
                 'iframe' => ! preg_match('#^https://#i', self::str($v['url'] ?? null)),
+                'social' => Sites::settings($site)['social'] === [],
                 default => false,
             };
-            if ($placeholder) {
+            if ($w['renderer'] === 'social' && $placeholder) {
+                $add('floor', 'placeholder', __('":name" has no links to show. Add the site\'s social pages under Settings.', ['name' => $name]), $id);
+            } elseif ($placeholder) {
                 $add('floor', 'placeholder', __('":name" isn\'t set up; visitors would see the builder\'s placeholder.', ['name' => $name]), $id);
             }
             if (in_array($w['renderer'], ['image', 'photo'], true) && self::str($v['src'] ?? null) !== '' && self::str($v['alt'] ?? null) === '') {

@@ -1,0 +1,49 @@
+# Render Blueprint for the API. The database is Aiven MySQL (Render has no managed MySQL);
+# the frontend runs elsewhere and calls https://<this service>.onrender.com/api.
+# Values marked sync: false are typed in the Render dashboard when the Blueprint is applied.
+services:
+  - type: web
+    name: myapp-backend
+    runtime: docker
+    # The free plan sleeps when idle, which also stops the queue worker and the scheduler.
+    plan: starter
+    healthCheckPath: /up
+    envVars:
+      - key: APP_NAME
+        value: Wand
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: FRONTEND_URL
+        value: http://localhost:5173
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: warning
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_DATABASE
+        value: defaultdb
+      - key: DB_USERNAME
+        value: avnadmin
+      - key: DB_PASSWORD
+        sync: false
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: FILESYSTEM_DISK
+        value: local
+      - key: MAIL_MAILER
+        value: log

@@ -33,6 +33,24 @@ class ProfileController extends Controller
     }
 
     /**
+     * PUT /user/preferences {key: value, ...} — merges into the user's preferences; only the keys
+     * listed here may be set. form_saved_notice: show "Saved" inside a form after saving (default off);
+     * chat_sound: a soft sound for new messenger messages (default on).
+     */
+    public function preferences(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate([
+            'form_saved_notice' => ['sometimes', 'boolean'],
+            'chat_sound' => ['sometimes', 'boolean'],
+        ]);
+
+        $user->update(['preferences' => [...$user->preferences ?? [], ...$data]]);
+
+        return response()->json($user);
+    }
+
+    /**
      * PUT /user/password. Needs the current password; afterwards every other session
      * (other browsers and devices) is signed out, and this one stays signed in.
      */

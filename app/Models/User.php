@@ -13,7 +13,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'theme_mode', 'theme_meta_id', 'ui_size', 'locale'])]
+#[Fillable(['name', 'email', 'password', 'theme_mode', 'theme_meta_id', 'ui_size', 'preferences', 'locale'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -81,6 +81,18 @@ class User extends Authenticatable
         return $cache->get($key);
     }
 
+    /** The companies this user acts for, with their rights in each. */
+    public function companyMemberships(): HasMany
+    {
+        return $this->hasMany(CompanyMember::class);
+    }
+
+    /** Whether DAN has confirmed who this person is. */
+    public function isVerified(): bool
+    {
+        return $this->verified_at !== null;
+    }
+
     /** What this user has been told about. */
     public function userNotifications(): HasMany
     {
@@ -96,7 +108,9 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'verified_at' => 'datetime',
             'password' => 'hashed',
+            'preferences' => 'array',
         ];
     }
 }

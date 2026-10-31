@@ -2,11 +2,19 @@
 
 namespace App\Providers;
 
+use App\Support\Market\Dan\DanDriver;
+use App\Support\Market\Dan\FakeDanDriver;
+use App\Support\Market\Khur\FakeKhurDriver;
+use App\Support\Market\Khur\KhurDriver;
+use App\Support\Market\Pay\FakePaymentDriver;
+use App\Support\Market\Pay\PaymentDriver;
+use App\Support\Market\Pay\QPayDriver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -15,7 +23,28 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // The market's DAN connection: only the fake one exists until the government agreement does.
+        $this->app->bind(DanDriver::class, function () {
+            if (config('market.dan.driver') !== 'fake') {
+                throw new RuntimeException('Only the fake DAN driver exists yet.');
+            }
+
+            return new FakeDanDriver;
+        });
+        // The market's ХУР connection, likewise fake for now.
+        $this->app->bind(KhurDriver::class, function () {
+            if (config('market.khur.driver') !== 'fake') {
+                throw new RuntimeException('Only the fake ХУР driver exists yet.');
+            }
+
+            return new FakeKhurDriver;
+        });
+        // Where market fees and escrow are paid: the fake test page, or QPay.
+        $this->app->bind(PaymentDriver::class, fn () => match (config('market.payments.driver')) {
+            'fake' => new FakePaymentDriver,
+            'qpay' => new QPayDriver,
+            default => throw new RuntimeException('Unknown market payment driver.'),
+        });
     }
 
     /**
