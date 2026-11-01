@@ -27,7 +27,8 @@ class SessionValues
     public static function for(?User $user): array
     {
         if (! $user) {
-            return [];
+            // Every name is there, empty, so a guest's request can't supply one (see NamedSql::builtins).
+            return array_fill_keys(SessionValue::pluck('path')->all(), null);
         }
 
         return Cache::rememberForever(self::key($user), fn () => self::compute($user));

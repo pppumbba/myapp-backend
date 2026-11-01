@@ -302,6 +302,7 @@
     "You were rated :stars/5 on :number": ":number гэрээнд таныг :stars/5 гэж үнэллээ",
     "The contract is not at that stage.": "Гэрээ энэ шатанд биш байна.",
     "The market holds money only when the contract uses escrow.": "Зах зээл зөвхөн эскроу ашигласан гэрээнд мөнгө хадгална.",
+    "The market cannot hold money until a licensed partner is in place.": "Лицензтэй түнштэй болох хүртэл зах зээл мөнгө хадгалах боломжгүй.",
     "This payment step is already paid in.": "Энэ төлбөрийн үе шатыг аль хэдийн төлсөн.",
     "The market now holds :amount₮ for \":step\"": "Зах зээл \":step\"-д :amount₮ хадгалж байна",
     "The vendor asks to be paid for \":step\"": "Нийлүүлэгч \":step\"-ийн төлбөрийг хүсэж байна",

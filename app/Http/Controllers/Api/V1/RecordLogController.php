@@ -15,8 +15,9 @@ class RecordLogController extends Controller
     /** GET /metas/{meta}/data/{id}/log?page= — the record of this meta's table. */
     public function index(Request $request, Meta $meta, int $id): JsonResponse
     {
-        Access::require($request->user(), $meta, 'view');
+        Access::requireRecords($request->user(), $meta);
         abort_unless($meta->table_name, 422, 'This meta has no table, so its records have no log.');
+        app(MetaDataController::class)->requireOwnRecord($request, $meta, $id);
 
         $page = DB::table('record_log as l')
             ->leftJoin('users as u', 'u.id', '=', 'l.user_id')

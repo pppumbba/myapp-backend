@@ -20,11 +20,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * shows its display_field (by default the looked-up meta's is_label field, else name).
  * is_label marks the field that names a meta's records; is_parent the field holding the id of
  * a record's parent in the same table, so a grid shows them as a tree. Links to other metas inside
- * json_config live in meta_meta_map (see MetaConfig).
+ * json_config live in meta_meta_map (see MetaConfig). widget_position is where a datagrid's
+ * column sits when the grid shows its records as widgets (json_config.view).
  */
 class MetaParam extends Model
 {
     use HasMetaLinks;
+
+    /** Where a column can sit on a record's widget. */
+    public const WIDGET_POSITIONS = ['image', 'title', 'subtitle', 'badge', 'body', 'footer'];
 
     protected $table = 'meta_params';
 
@@ -38,6 +42,7 @@ class MetaParam extends Model
         'data_type',
         'data_mask',
         'render_type',
+        'widget_position',
         'icon_cls',
         'main_meta_id',
         'ref_meta_id',

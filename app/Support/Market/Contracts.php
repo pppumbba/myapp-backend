@@ -462,6 +462,9 @@ class Contracts
      */
     private static function fill(Contract $contract, array $data): void
     {
+        if (($data['middleman'] ?? null) === 'escrow') {
+            Escrow::requireAvailable();
+        }
         $contract->fill(array_intersect_key($data, array_flip(['title', 'delivery_date', 'payment_terms', 'pledge', 'pledge_amount', 'middleman', 'discount'])));
 
         if (array_key_exists('items', $data)) {

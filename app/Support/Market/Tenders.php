@@ -172,6 +172,10 @@ class Tenders
         self::requirePoster($by, $tender);
         abort_unless($tender->status === 'draft', 422, __('This tender is already published.'));
         abort_if($tender->closes_at === null || $tender->closes_at->isPast(), 422, __('The close date must be in the future.'));
+        $rule = self::rule((array) $tender->rule);
+        if ($rule['middleman'] === 'escrow' || $rule['security'] > 0) {
+            Escrow::requireAvailable();
+        }
 
         $payment = Payment::where('subject_type', $tender->getMorphClass())->where('subject_id', $tender->id)
             ->where('kind', 'posting')->where('status', 'pending')->first();

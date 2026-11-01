@@ -416,7 +416,8 @@ class MetaDataController extends Controller
 
         $tokens = [];
         if ($source['query']) {
-            [$sql, $bindings, $tokens] = NamedSql::bind($source['query'], $scope + $filters + NamedSql::builtins($request->user()));
+            // The built-ins go first: who the user is never comes from the browser.
+            [$sql, $bindings, $tokens] = NamedSql::bind($source['query'], NamedSql::builtins($request->user()) + $scope + $filters);
             $query = DB::query()->fromRaw("({$sql}) as q", $bindings)->select('q.*');
         } else {
             $query = DB::table($source['table'])->select($source['columns']);
@@ -479,7 +480,7 @@ class MetaDataController extends Controller
         $sql = trim((string) $meta->query_string);
         abort_if($sql === '', 422, 'This get meta has no query yet.');
 
-        [$sql, $bindings] = NamedSql::bind($sql, $this->filters($request, 'params') + NamedSql::builtins($request->user()));
+        [$sql, $bindings] = NamedSql::bind($sql, NamedSql::builtins($request->user()) + $this->filters($request, 'params'));
         $row = $this->read(fn () => DB::selectOne($sql, $bindings));
 
         return response()->json($row ?? (object) []);
@@ -515,6 +516,29 @@ class MetaDataController extends Controller
         return array_map(fn ($v) => trim((string) $v), array_filter($values, fn ($v) => is_scalar($v)));
     }
 
+    /**
+     * A query kept to the signed-in user (:user_id or a session value) also decides which single
+     * records they reach, so a row can't be read, changed or deleted by guessing its id.
+     */
+    public function requireOwnRecord(Request $request, Meta $meta, int $id): void
+    {
+        $user = $request->user();
+        if ($user?->isAdmin()) {
+            return;
+        }
+        $source = $this->source($meta);
+        if (! $source['query']) {
+            return;
+        }
+        $builtins = NamedSql::builtins($user);
+        [$sql, $bindings, $tokens] = NamedSql::bind($source['query'], $builtins + $this->filters($request, 'scope'));
+        if (! array_intersect($tokens, array_diff(array_keys($builtins), ['today']))) {
+            return;
+        }
+
+        abort_unless($this->read(fn () => DB::query()->fromRaw("({$sql}) as q", $bindings)->where($source['key'], $id)->exists()), 404, 'Record not found.');
+    }
+
     /** GET /metas/{meta}/data/{id} */
     public function show(Request $request, Meta $meta, string $id): JsonResponse
     {
@@ -523,6 +547,7 @@ class MetaDataController extends Controller
             return response()->json(ExternalService::find($meta, $request->user(), $id));
         }
         $id = (int) $id;
+        $this->requireOwnRecord($request, $meta, $id);
         $source = $this->source($meta, true);
         $row = $this->withoutHidden(DB::table($source['table'])->select($source['columns'])->where($source['key'], $id), $source, $request)->first();
 
@@ -640,6 +665,7 @@ class MetaDataController extends Controller
             return response()->json(ExternalService::update($meta, $request->user(), $id, $request->all()));
         }
         $id = (int) $id;
+        $this->requireOwnRecord($request, $meta, $id);
         $source = $this->source($meta, true);
         abort_unless($this->withoutHidden(DB::table($source['table'])->where($source['key'], $id), $source, $request)->exists(), 404, 'Record not found.');
 
@@ -676,6 +702,7 @@ class MetaDataController extends Controller
             return response()->json(null, 204);
         }
         $id = (int) $id;
+        $this->requireOwnRecord($request, $meta, $id);
         $source = $this->source($meta, true);
         abort_unless($this->withoutHidden(DB::table($source['table'])->where($source['key'], $id), $source, $request)->exists(), 404, 'Record not found.');
         $details = $this->details($meta);

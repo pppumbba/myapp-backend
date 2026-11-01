@@ -21,6 +21,9 @@ use RuntimeException;
  */
 class Payments
 {
+    /** Kinds of payment the market would hold for others rather than keep as a fee. */
+    private const HELD = ['escrow', 'security'];
+
     /**
      * Opens an invoice for the payer; nothing to pay is paid at once.
      *
@@ -28,6 +31,9 @@ class Payments
      */
     public static function invoice(User $payer, ?Company $company, string $kind, float $amount, Model $subject, ?ContractStep $step = null, ?array $lines = null): Payment
     {
+        if (in_array($kind, self::HELD, true) || ($subject instanceof Contract && $subject->middleman === 'escrow')) {
+            Escrow::requireAvailable();
+        }
         $driver = app(PaymentDriver::class);
         $payment = Payment::create([
             'user_id' => $payer->id,

@@ -21,6 +21,16 @@ class Escrow
     /** Statuses in which the vendor is working and money can be held. */
     public const RUNNING = ['active', 'in_progress', 'delivered'];
 
+    /** Held money is test money: payouts only move the ledger, so real payments may not come in. */
+    public static function requireAvailable(): void
+    {
+        abort_unless(
+            config('market.escrow.mode') === 'test' && config('market.payments.driver') === 'fake',
+            422,
+            __('The market cannot hold money until a licensed partner is in place.'),
+        );
+    }
+
     /** The buyer pays a step into escrow: an invoice for its amount. */
     public static function fund(User $by, ContractStep $step): Payment
     {

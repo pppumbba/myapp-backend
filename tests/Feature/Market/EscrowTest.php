@@ -4,10 +4,14 @@ namespace Tests\Feature\Market;
 
 use App\Models\Contract;
 use App\Models\ContractStep;
+use App\Models\Payment;
 use App\Models\User;
 use App\Support\Market\Contracts;
+use App\Support\Market\Payments;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class EscrowTest extends TestCase
@@ -22,6 +26,93 @@ class EscrowTest extends TestCase
         $parties['step'] = $parties['contract']->steps()->first();
 
         return $parties;
+    }
+
+    public function test_real_payments_cannot_put_money_in_escrow(): void
+    {
+        ['buyer' => $buyer, 'step' => $step] = $this->escrowContract();
+        config(['market.payments.driver' => 'qpay']);
+        Http::fake();
+
+        $this->stepAction($buyer, $step, 'fund', [], 422);
+
+        Http::assertNothingSent();
+        $this->assertSame(0, Payment::where('kind', 'escrow')->count());
+        $this->assertSame('pending', $step->fresh()->status);
+    }
+
+    public function test_only_test_mode_holds_money(): void
+    {
+        ['buyer' => $buyer, 'step' => $step] = $this->escrowContract();
+        config(['market.escrow.mode' => 'live']);
+
+        $this->stepAction($buyer, $step, 'fund', [], 422);
+
+        $this->assertSame(0, Payment::where('kind', 'escrow')->count());
+    }
+
+    public function test_a_contract_cannot_choose_escrow_on_real_payments(): void
+    {
+        config(['market.payments.driver' => 'qpay']);
+
+        $this->expectException(HttpException::class);
+        $this->draftContract(['middleman' => 'escrow']);
+    }
+
+    public function test_no_fee_is_charged_for_an_escrow_contract_on_real_payments(): void
+    {
+        ['buyer' => $buyer, 'contract' => $contract] = $this->escrowContract();
+        config(['market.payments.driver' => 'qpay']);
+        Http::fake();
+
+        try {
+            Payments::invoice($buyer, $contract->buyerCompany, 'middleman', 5000, $contract);
+            $this->fail('The fee was invoiced.');
+        } catch (HttpException $e) {
+            $this->assertSame(422, $e->getStatusCode());
+        }
+
+        Http::assertNothingSent();
+        $this->assertSame(0, Payment::count());
+    }
+
+    public function test_a_bid_security_is_refused_on_real_payments(): void
+    {
+        ['buyer' => $buyer, 'contract' => $contract] = $this->escrowContract('on');
+        config(['market.payments.driver' => 'qpay']);
+        Http::fake();
+
+        try {
+            Payments::invoice($buyer, $contract->buyerCompany, 'security', 5000, $contract);
+            $this->fail('The security was invoiced.');
+        } catch (HttpException $e) {
+            $this->assertSame(422, $e->getStatusCode());
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_a_tender_needing_held_money_cannot_be_published_on_real_payments(): void
+    {
+        ['poster' => $poster, 'tender' => $tender] = $this->draftTender(['rule' => ['security' => 100000]]);
+        config(['market.payments.driver' => 'qpay']);
+        Http::fake();
+        Sanctum::actingAs($poster);
+
+        $this->postJson("/api/market/tenders/{$tender->id}/publish")->assertStatus(422);
+
+        Http::assertNothingSent();
+        $this->assertSame(0, Payment::count());
+    }
+
+    public function test_an_ordinary_fee_still_goes_through_real_payments(): void
+    {
+        ['poster' => $poster, 'tender' => $tender] = $this->draftTender();
+        config(['market.payments.driver' => 'qpay', 'market.payments.qpay.base_url' => 'https://qpay.test']);
+        Http::fake(['*' => Http::response(['access_token' => 't', 'invoice_id' => 'inv-1', 'qr_text' => 'qr', 'qPay_shortUrl' => 'https://pay.test/1'])]);
+        Sanctum::actingAs($poster);
+
+        $this->postJson("/api/market/tenders/{$tender->id}/publish")->assertOk()->assertJsonPath('payment.kind', 'posting');
     }
 
     private function stepAction(User $user, ContractStep $step, string $action, array $body = [], int $status = 200): array

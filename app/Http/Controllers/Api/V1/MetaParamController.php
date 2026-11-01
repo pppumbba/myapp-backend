@@ -107,6 +107,7 @@ class MetaParamController extends Controller
             'data_type' => ['sometimes', 'string', 'max:50'],
             'data_mask' => ['nullable', 'string', 'max:255'],
             'render_type' => ['nullable', 'string', 'max:50'],
+            'widget_position' => ['nullable', Rule::in(MetaParam::WIDGET_POSITIONS)],
             'icon_cls' => ['nullable', 'string', 'max:255'],
             'ref_meta_id' => ['nullable', 'integer', 'exists:metas,id'],
             'is_primary' => ['sometimes', 'boolean'],
