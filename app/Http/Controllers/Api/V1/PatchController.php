@@ -74,6 +74,19 @@ class PatchController extends Controller
         return $this->file($patch->package, "{$patch->code}.patch.json");
     }
 
+    /** POST /patches/tables {meta_ids, with_used?} — the tables those metas need, for picking whose rows ship. */
+    public function tables(Request $request): JsonResponse
+    {
+        Access::requireAdmin($request->user());
+        $input = $request->validate([
+            'meta_ids' => ['required', 'array'],
+            'meta_ids.*' => ['integer', 'exists:metas,id'],
+            'with_used' => ['sometimes', 'boolean'],
+        ]);
+
+        return response()->json(Patches::tables($input['meta_ids'], (bool) ($input['with_used'] ?? false)));
+    }
+
     /** GET /patches/changed?since= — metas changed since then (default: since the newest release). */
     public function changed(Request $request): JsonResponse
     {
@@ -136,6 +149,8 @@ class PatchController extends Controller
             'name' => [$current ? 'sometimes' : 'required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'with_used' => ['sometimes', 'boolean'],
+            'data_tables' => ['sometimes', 'nullable', 'array'],
+            'data_tables.*' => ['string', 'regex:/^\w+$/'],
             'meta_ids' => ['sometimes', 'array'],
             'meta_ids.*' => ['integer', 'exists:metas,id'],
         ]);

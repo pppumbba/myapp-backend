@@ -286,6 +286,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Patches: metas shipped as released files, and files installed here with rollback (Patches).
     Route::get('/patches/changed', [PatchController::class, 'changed']);
+    Route::post('/patches/tables', [PatchController::class, 'tables']);
     Route::get('/patches', [PatchController::class, 'index']);
     Route::post('/patches', [PatchController::class, 'store']);
     Route::put('/patches/{patch}', [PatchController::class, 'update']);

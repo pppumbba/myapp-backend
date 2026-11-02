@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPackedPackage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -12,10 +13,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  */
 class Patch extends Model
 {
-    protected $fillable = ['code', 'name', 'description', 'with_used', 'status', 'package', 'hash', 'released_at', 'released_by', 'created_by'];
+    use HasPackedPackage;
+
+    protected $fillable = ['code', 'name', 'description', 'with_used', 'data_tables', 'status', 'package', 'hash', 'released_at', 'released_by', 'created_by'];
 
     protected $casts = [
         'with_used' => 'boolean',
+        'data_tables' => 'array',
         'released_at' => 'datetime',
     ];
 

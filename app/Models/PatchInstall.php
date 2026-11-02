@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPackedPackage;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** A patch file installed here: what it did to each meta, so it can be undone (see App\Support\Patches). */
 class PatchInstall extends Model
 {
+    use HasPackedPackage;
+
     public $timestamps = false;
 
     protected $fillable = ['patch_code', 'patch_name', 'description', 'hash', 'source', 'released_at', 'existing', 'result', 'package', 'installed_by', 'installed_at', 'rolled_back_at', 'rolled_back_by'];

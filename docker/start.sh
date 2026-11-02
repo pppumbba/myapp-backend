@@ -28,10 +28,20 @@ as_web php artisan storage:link --force >/dev/null 2>&1 || true
 as_web php artisan config:cache
 as_web php artisan route:cache
 as_web php artisan view:cache
-as_web php artisan migrate --force
+
+# The port opens first: Render gives up on a service that takes too long to open one, and
+# migrations over the network to Aiven can take minutes. A failed migration is logged and the
+# site stays up, so its cause can be read and fixed.
+apache2-foreground &
+APACHE=$!
+trap 'kill -TERM "$APACHE"' TERM INT
+
+if ! as_web php artisan migrate --force; then
+    echo "MIGRATIONS FAILED: the site is running on an older database. See the error above." >&2
+fi
 
 # Restarted if they stop; --max-time lets the worker pick up a fresh deploy's code regularly.
 ( while true; do as_web php artisan queue:work --sleep=3 --tries=3 --max-time=3600 || true; sleep 2; done ) &
 ( while true; do as_web php artisan schedule:work || true; sleep 2; done ) &
 
-exec apache2-foreground
+wait "$APACHE"
