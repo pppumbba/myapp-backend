@@ -59,11 +59,30 @@ class User extends Authenticatable
         return $this->perRequest('is_admin', fn () => $this->roles()->where('code', Role::ADMIN)->exists());
     }
 
-    /** After the user's roles change: isAdmin() and roleIds() look again. */
+    /**
+     * The builder features the user's roles give (Role::FEATURES); an admin has them all.
+     *
+     * @return list<string>
+     */
+    public function features(): array
+    {
+        return $this->perRequest('features', fn () => $this->isAdmin()
+            ? Role::FEATURES
+            : array_values(array_intersect(Role::FEATURES, $this->roles()->pluck('features')->flatten()->unique()->all())));
+    }
+
+    /** Whether the user may make metas and change their own: a "build" or "studio" role, or an admin. */
+    public function isBuilder(): bool
+    {
+        return $this->features() !== [];
+    }
+
+    /** After the user's roles change: isAdmin(), roleIds() and features() look again. */
     public function forgetRoles(): void
     {
-        request()->attributes->remove("user.{$this->id}.is_admin");
-        request()->attributes->remove("user.{$this->id}.role_ids");
+        foreach (['is_admin', 'role_ids', 'features'] as $key) {
+            request()->attributes->remove("user.{$this->id}.{$key}");
+        }
     }
 
     /**

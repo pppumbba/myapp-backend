@@ -32,10 +32,39 @@ class Access
         abort_unless($user?->isAdmin(), 403, 'Only administrators can do this.');
     }
 
+    /** Stops with 403 unless the user may make metas: an admin, or a role with a builder feature. */
+    public static function requireBuilder(?User $user): void
+    {
+        abort_unless($user?->isBuilder(), 403, __('Only builders can do this.'));
+    }
+
+    /** Whether the user may change this meta and its parts: an admin, or the builder who made it. */
+    public static function designs(?User $user, Meta|int $meta): bool
+    {
+        return (bool) $user?->isAdmin() || self::owns($user, $meta);
+    }
+
+    /** Stops with 403 unless the user may change this meta (see designs). */
+    public static function requireDesign(?User $user, Meta|int $meta): void
+    {
+        abort_unless(self::designs($user, $meta), 403, __('You can only change metas you made.'));
+    }
+
+    /** Whether the user is a builder who made this meta: they may do everything with it. */
+    public static function owns(?User $user, Meta|int $meta): bool
+    {
+        if (! $user?->isBuilder()) {
+            return false;
+        }
+        $createdBy = $meta instanceof Meta ? $meta->created_by : Meta::whereKey($meta)->value('created_by');
+
+        return $createdBy !== null && (int) $createdBy === $user->id;
+    }
+
     /** Whether the user may view, create, edit or delete through this meta. */
     public static function can(?User $user, Meta|int $meta, string $ability): bool
     {
-        if ($user?->isAdmin()) {
+        if ($user?->isAdmin() || self::owns($user, $meta)) {
             return true;
         }
         if (in_array($ability, self::PUBLIC_ABILITIES, true) && self::isPublic($meta)) {
@@ -55,7 +84,7 @@ class Access
         if (! $meta) {
             return false;
         }
-        if ($user?->isAdmin() || self::granted($user, $meta, 'view')) {
+        if ($user?->isAdmin() || self::owns($user, $meta) || self::granted($user, $meta, 'view')) {
             return true;
         }
         $meta->loadMissing('type');
@@ -112,6 +141,7 @@ class Access
 
         return $query->where(fn ($q) => $q->where('metas.is_public', true)
             ->when($user, fn ($q) => $q->orWhere('metas.is_open', true))
+            ->when($user?->isBuilder(), fn ($q) => $q->orWhere('metas.created_by', $user->id))
             ->orWhereExists(fn ($p) => $p->from('meta_permissions')
                 ->whereColumn('meta_permissions.meta_id', 'metas.id')->whereIn('role_id', $roles)->where('can_view', true)));
     }
@@ -139,6 +169,11 @@ class Access
         if ($user) {
             foreach (Meta::where('is_open', true)->pluck('id') as $metaId) {
                 $rules[$metaId] = array_merge($rules[$metaId] ?? array_fill_keys(MetaPermission::ABILITIES, false), ['view' => true]);
+            }
+        }
+        if ($user?->isBuilder()) {
+            foreach (Meta::where('created_by', $user->id)->pluck('id') as $metaId) {
+                $rules[$metaId] = array_fill_keys(MetaPermission::ABILITIES, true);
             }
         }
 

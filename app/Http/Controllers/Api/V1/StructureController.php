@@ -9,6 +9,7 @@ use App\Models\MetaParam;
 use App\Models\MetaType;
 use App\Support\Access;
 use App\Support\Autonumber;
+use App\Support\Builders;
 use App\Support\MetaVersions;
 use App\Support\PageLayout;
 use Illuminate\Http\JsonResponse;
@@ -52,7 +53,7 @@ class StructureController extends Controller
      */
     public function save(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         abort_unless(in_array($meta->type?->code, self::TYPES, true), 422, __('The studio lays out apps, datagrids, forms and tab sets only.'));
 
         $data = $request->validate([
@@ -76,7 +77,8 @@ class StructureController extends Controller
      */
     public function saveApp(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        abort_unless(in_array('studio', $request->user()?->features() ?? [], true), 403, __('Only builders with the studio can do this.'));
+        Access::requireDesign($request->user(), $meta);
         abort_unless($meta->type?->code === 'app', 422, __('Only an app is built with its screens.'));
 
         $data = $request->validate([
@@ -98,6 +100,14 @@ class StructureController extends Controller
         ]);
         $screens = $data['metas'] ?? [];
         $user = $request->user();
+        foreach ($screens as $s) {
+            if (! empty($s['table_name']) && ! $user->isAdmin()) {
+                Builders::checkTable($s['table_name']);
+            }
+        }
+        if (! empty($data['meta']['table_name']) && ! $user->isAdmin()) {
+            Builders::checkTable($data['meta']['table_name']);
+        }
 
         // How each existing screen was, kept as a version once the save went through.
         $before = [];
@@ -106,6 +116,7 @@ class StructureController extends Controller
                 $screen = Meta::with('type')->find($s['id']);
                 abort_unless($screen && in_array($screen->type?->code, self::SCREEN_TYPES, true), 422, __('":name" is not a datagrid, form, tab set, page or dashboard of this studio.', ['name' => $s['name'] ?? $s['id']]));
                 abort_if($screen->id === $meta->id, 422, __('An app cannot be one of its own screens.'));
+                Access::requireDesign($user, $screen);
                 $before[] = MetaVersions::snapshot($screen->id);
             }
         }
@@ -265,6 +276,7 @@ class StructureController extends Controller
 
         $problem = Autonumber::problem($values['json_config']['autonumber'] ?? null);
         abort_if($problem !== null, 422, $problem ?? '');
+        Builders::checkParam(request()->user(), $values);
 
         return $values;
     }
@@ -302,6 +314,7 @@ class StructureController extends Controller
             abort_if($getId && ! Meta::whereKey($getId)->exists(), 422, __('The button ":label" uses a get that no longer exists.', ['label' => $label]));
             $config = $a['json_config'] ?? null;
             abort_unless($config === null || is_array($config), 422, __('Settings must be an object.'));
+            Builders::checkAction(request()->user(), ['action' => $kind, 'form_meta_id' => $formId, 'get_meta_id' => $getId]);
 
             $values = [
                 'action' => $kind,

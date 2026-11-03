@@ -20,3 +20,5 @@ docs
 .claude
 .idea
 .vscode
+docker/droplet/.env*
+docker/droplet/aiven-ca.pem

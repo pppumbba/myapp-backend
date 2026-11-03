@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Meta;
 use App\Models\MetaAction;
 use App\Support\Access;
+use App\Support\Builders;
 use App\Support\GridReuse;
 use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
@@ -40,8 +41,9 @@ class MetaActionController extends Controller
     /** POST /metas/{meta}/actions */
     public function store(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         $data = $this->validated($request);
+        Builders::checkAction($request->user(), $data);
         $this->requireStageQuery($data);
         $data['grid_meta_id'] = $meta->id;
         $data['order_number'] ??= (int) MetaAction::where('grid_meta_id', $meta->id)->max('order_number') + 1;
@@ -52,8 +54,9 @@ class MetaActionController extends Controller
     /** PUT /actions/{action} */
     public function update(Request $request, MetaAction $action): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $action->grid_meta_id);
         $data = $this->validated($request, true);
+        Builders::checkAction($request->user(), $data);
         $this->requireStageQuery($data + $action->only(['action', 'form_meta_id']));
         $action->update($data);
 
@@ -63,7 +66,7 @@ class MetaActionController extends Controller
     /** DELETE /actions/{action} */
     public function destroy(Request $request, MetaAction $action): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $action->grid_meta_id);
         $action->delete();
 
         return response()->json(null, 204);

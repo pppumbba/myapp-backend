@@ -24,10 +24,10 @@ class ChartController extends Controller
         return response()->json(ChartQuery::run($meta, $meta->json_config ?? [], $request->user(), $request->query('from'), $request->query('to')));
     }
 
-    /** POST /metas/{meta}/chart/preview {config, from, to} — admins try a config before saving it. */
+    /** POST /metas/{meta}/chart/preview {config, from, to} — its builder tries a config before saving it. */
     public function preview(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         $this->requireChart($meta);
         $data = $request->validate([
             'config' => ['present', 'array'],
@@ -41,7 +41,7 @@ class ChartController extends Controller
     /** GET /metas/{meta}/columns — what the chart's table or query offers, for the builder. */
     public function columns(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         $this->requireChart($meta);
 
         return response()->json(ChartQuery::columns($meta, $request->user()));

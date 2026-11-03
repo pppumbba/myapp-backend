@@ -7,6 +7,7 @@ use App\Models\Meta;
 use App\Models\MetaParam;
 use App\Support\Access;
 use App\Support\Autonumber;
+use App\Support\Builders;
 use App\Support\Criteria;
 use App\Support\FilterLookups;
 use App\Support\GridReuse;
@@ -51,8 +52,9 @@ class MetaParamController extends Controller
     /** POST /metas/{meta}/params */
     public function store(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         $data = $this->validated($request, $meta);
+        Builders::checkParam($request->user(), $data);
         $data['main_meta_id'] = $meta->id;
 
         $param = MetaParam::create($data);
@@ -71,8 +73,9 @@ class MetaParamController extends Controller
     /** PUT/PATCH /params/{param} */
     public function update(Request $request, MetaParam $param): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $param->main_meta_id);
         $data = $this->validated($request, $param->main, $param);
+        Builders::checkParam($request->user(), $data);
 
         $param->update($data);
 
@@ -82,7 +85,7 @@ class MetaParamController extends Controller
     /** DELETE /params/{param} — children are removed too (cascadeOnDelete). */
     public function destroy(Request $request, MetaParam $param): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $param->main_meta_id);
         $param->delete();
 
         return response()->json(null, 204);

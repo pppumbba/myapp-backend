@@ -36,9 +36,9 @@ class RoleController extends Controller
         $data = $this->validated($request, $role);
         abort_if($role->code === Role::ADMIN && isset($data['code']) && $data['code'] !== Role::ADMIN, 422, 'The admin role keeps its code.');
 
-        $before = $role->only(['code', 'name', 'description']);
+        $before = $role->only(['code', 'name', 'description', 'features']);
         $role->update($data);
-        RoleLog::role($role->id, $before, $role->only(['code', 'name', 'description']), $request->user());
+        RoleLog::role($role->id, $before, $role->only(['code', 'name', 'description', 'features']), $request->user());
 
         return response()->json($role->loadCount('users'));
     }
@@ -63,6 +63,9 @@ class RoleController extends Controller
             'code' => [$req, 'string', 'max:100', 'regex:/^[a-z0-9_\-]+$/', Rule::unique('roles', 'code')->ignore($current?->id)],
             'name' => [$req, 'string', 'max:255'],
             'description' => ['nullable', 'string'],
+            // Builder abilities beyond metas' records (Role::FEATURES).
+            'features' => ['sometimes', 'nullable', 'array'],
+            'features.*' => [Rule::in(Role::FEATURES), 'distinct'],
         ]);
     }
 }

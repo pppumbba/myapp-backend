@@ -31,7 +31,7 @@ class PageController extends Controller
     /** PUT /metas/{meta}/page — saves the whole layout (see PageLayout::save). */
     public function save(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         $this->requirePage($meta);
         $data = $request->validate([
             'items' => ['present', 'array'],

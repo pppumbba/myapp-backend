@@ -1,0 +1,33 @@
+# The API on a DigitalOcean droplet: the same image as Render, behind Caddy for HTTPS.
+# Uploads and PDFs live in the app-storage volume, so they survive restarts and deploys.
+# Run from docker/droplet: docker compose up -d --build
+services:
+  app:
+    build: ../..
+    env_file: .env.production
+    environment:
+      PORT: 8080
+    volumes:
+      - app-storage:/var/www/html/storage/app
+      - ./aiven-ca.pem:/etc/secrets/aiven-ca.pem:ro
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.8.4
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  app-storage:
+  caddy-data:
+  caddy-config:

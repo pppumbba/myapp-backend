@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Meta;
 use App\Support\Access;
+use App\Support\Builders;
 use App\Support\MetaVersions;
 use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
@@ -36,12 +37,13 @@ class MetaController extends Controller
     {
         $options = Access::viewable(Meta::query(), $request->user())->with('type:id,code')
             ->orderBy('name')
-            ->get(['id', 'code', 'name', 'type_id'])
+            ->get(['id', 'code', 'name', 'type_id', 'created_by'])
             ->map(fn (Meta $m) => [
                 'id' => $m->id,
                 'code' => $m->code,
                 'name' => $m->name,
                 'type' => $m->type?->code,
+                'created_by' => $m->created_by,
             ]);
 
         return response()->json($options);
@@ -50,8 +52,9 @@ class MetaController extends Controller
     /** POST /metas */
     public function store(Request $request): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireBuilder($request->user());
         $data = $this->validated($request);
+        Builders::checkMeta($request->user(), $data);
         $data['created_by'] = $request->user()->id;
         $data['updated_by'] = $request->user()->id;
 
@@ -84,8 +87,9 @@ class MetaController extends Controller
     /** PUT/PATCH /metas/{meta} */
     public function update(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         $data = $this->validated($request, $meta);
+        Builders::checkMeta($request->user(), $data, $meta);
         $data['updated_by'] = $request->user()->id;
 
         $tagIds = $this->tagIds($data);
@@ -106,7 +110,7 @@ class MetaController extends Controller
      */
     public function destroy(Request $request, Meta $meta): JsonResponse
     {
-        Access::requireAdmin($request->user());
+        Access::requireDesign($request->user(), $meta);
         // Kept as a version, so the meta can be restored.
         MetaVersions::saveIfChanged($meta->id, $request->user(), 'Before deleting');
         $meta->delete();
