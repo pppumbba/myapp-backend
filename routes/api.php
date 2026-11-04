@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\V1\NotificationRuleController;
 use App\Http\Controllers\Api\V1\PageController;
 use App\Http\Controllers\Api\V1\PatchController;
 use App\Http\Controllers\Api\V1\PermissionController;
+use App\Http\Controllers\Api\V1\PlatformController;
 use App\Http\Controllers\Api\V1\ProcessFlowController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\PublicSiteController;
@@ -81,6 +82,10 @@ Route::middleware(['auth:sanctum', 'customer:optional'])->group(function () {
     Route::put('/user/preferences', [ProfileController::class, 'preferences']);
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:customers');
     Route::post('/customers/join', [CustomerController::class, 'join'])->middleware('throttle:customers-join');
+    Route::post('/customers/{customer}/use', [CustomerController::class, 'use'])->whereNumber('customer');
+    Route::get('/me/customers', [CustomerController::class, 'mine']);
+    Route::delete('/me/customers/{customer}', [CustomerController::class, 'leave'])->whereNumber('customer');
+    Route::get('/platform/customers', [PlatformController::class, 'customers']);
     Route::put('/user/password', [ProfileController::class, 'password'])->middleware('throttle:password');
 });
 
@@ -164,7 +169,8 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     // The signed-in user's own profile.
     Route::put('/user/theme', [ThemeController::class, 'mine']);
 
-    // Invite codes of the current customer (its admins).
+    // The current customer's people and invite codes (its admins).
+    Route::delete('/customer/members/{user}', [CustomerController::class, 'removeMember'])->whereNumber('user');
     Route::get('/customer/invites', [CustomerInviteController::class, 'index']);
     Route::post('/customer/invites', [CustomerInviteController::class, 'store']);
     Route::post('/customer/invites/{invite}/revoke', [CustomerInviteController::class, 'revoke'])->whereNumber('invite');

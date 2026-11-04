@@ -406,5 +406,8 @@
   "Pick a customer.": "Харилцагчаа сонгоно уу.",
   "You are no longer in this customer.": "Та энэ харилцагчид хамаарахаа больсон байна.",
   "This code is not valid.": "Энэ код хүчингүй байна.",
-  "Only the customer's admins can do this.": "Үүнийг зөвхөн харилцагчийн админ хийж болно."
+  "Only the customer's admins can do this.": "Үүнийг зөвхөн харилцагчийн админ хийж болно.",
+  "You are the last admin of this customer.": "Та энэ харилцагчийн сүүлчийн админ байна.",
+  "You are not in this customer.": "Та энэ харилцагчид хамаарахгүй.",
+  "Removed.": "Хасагдлаа."
 }

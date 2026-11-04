@@ -55,8 +55,9 @@ class GoogleLoginTest extends TestCase
         $user = User::where('email', 'ana@gmail.com')->sole();
         $this->assertSame($user->id, $res->json('user.id'));
         $this->assertNotEmpty($res->json('token'));
-        // The first account is the admin, as with signing up.
-        $this->assertTrue($user->isAdmin());
+        // As with signing up: no customer and no admin yet; the person makes or joins one next.
+        $res->assertJsonPath('customers', []);
+        $this->assertFalse($user->isAdmin());
         $this->assertSame('g-1', SocialAccount::where('user_id', $user->id)->value('provider_id'));
 
         // The code works once.

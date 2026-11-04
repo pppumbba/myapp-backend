@@ -168,18 +168,4 @@ class AccessTest extends TestCase
         $this->putJson("/api/users/{$this->admin->id}/roles", ['role_ids' => [$role]])->assertOk();
         $this->assertFalse($this->admin->isAdmin());
     }
-
-    public function test_the_first_account_registered_is_an_admin(): void
-    {
-        User::query()->delete();
-        $register = fn (string $email) => $this->postJson('/api/register', [
-            'name' => 'Someone', 'email' => $email, 'password' => 'secret-pass-123', 'password_confirmation' => 'secret-pass-123',
-        ])->assertCreated();
-
-        $register('first@example.com');
-        $register('second@example.com');
-
-        $this->assertTrue(User::where('email', 'first@example.com')->first()->isAdmin());
-        $this->assertFalse(User::where('email', 'second@example.com')->first()->isAdmin());
-    }
 }

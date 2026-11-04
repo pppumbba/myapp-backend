@@ -147,4 +147,51 @@ class Customers
             return $customer;
         });
     }
+
+    /**
+     * The answer to signing in or up: the person, a token and their customers. With exactly one
+     * customer the token already works in it (and session values are worked out there).
+     *
+     * @return array{user: User, token: string, customers: list<array<string, mixed>>}
+     */
+    public static function signedIn(User $user): array
+    {
+        $customers = self::listFor($user);
+        if (count($customers) === 1) {
+            $customer = Customer::find($customers[0]['id']);
+            CustomerSchema::run($customer, fn () => SessionValues::refresh($user));
+
+            return ['user' => $user, 'token' => self::bindToken($user, $customer), 'customers' => $customers];
+        }
+
+        return ['user' => $user, 'token' => $user->createToken('api')->plainTextToken, 'customers' => $customers];
+    }
+
+    /** Whether $user is the only admin $customer has left. */
+    public static function isLastAdmin(Customer $customer, User $user): bool
+    {
+        $members = CustomerUser::where('customer_id', $customer->id)->pluck('user_id')->all();
+
+        return CustomerSchema::run($customer, function () use ($members, $user) {
+            $admins = DB::table('user_roles')->join('roles', 'roles.id', '=', 'user_roles.role_id')
+                ->where('roles.code', Role::ADMIN)->whereIn('user_roles.user_id', $members)
+                ->distinct()->pluck('user_roles.user_id')->map(fn ($id) => (int) $id)->all();
+
+            return $admins === [$user->id];
+        });
+    }
+
+    /** $user is no longer in $customer: their place, their roles there and their tokens for it go. */
+    public static function remove(Customer $customer, User $user): void
+    {
+        if (self::isLastAdmin($customer, $user)) {
+            throw ValidationException::withMessages(['customer' => __('You are the last admin of this customer.')])->status(422);
+        }
+        CustomerSchema::run($customer, function () use ($user) {
+            $user->roles()->detach();
+            $user->forgetRoles();
+        });
+        CustomerUser::where('customer_id', $customer->id)->where('user_id', $user->id)->delete();
+        $user->tokens()->where('customer_id', $customer->id)->delete();
+    }
 }

@@ -27,20 +27,14 @@ class User extends Authenticatable
     protected $appends = ['theme_meta_id'];
 
     /**
-     * A new account. The very first account runs the place: it gets the admin role.
+     * A new account. It is in no customer yet: the person makes one (and is its admin) or joins
+     * one with an invite code next.
      *
      * @param  array<string, mixed>  $attributes
      */
     public static function startAccount(array $attributes): self
     {
-        $first = ! self::exists();
-        $user = self::create($attributes);
-        if ($first) {
-            $user->roles()->attach(Role::firstOrCreate(['code' => Role::ADMIN], ['name' => 'Administrator'])->id);
-            $user->forgetRoles();
-        }
-
-        return $user;
+        return self::create($attributes);
     }
 
     /** Sign-in accounts at other providers (Google) linked to this user. */

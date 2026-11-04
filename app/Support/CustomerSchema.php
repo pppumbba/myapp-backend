@@ -22,6 +22,9 @@ class CustomerSchema
 
     public static function use(Customer $customer): void
     {
+        if (self::$current && self::$current->id === $customer->id && self::$current->schema_name === $customer->schema_name) {
+            return;
+        }
         self::$baseCachePrefix ??= (string) config('cache.prefix');
 
         if (config('database.connections.customer.driver') !== 'sqlite'

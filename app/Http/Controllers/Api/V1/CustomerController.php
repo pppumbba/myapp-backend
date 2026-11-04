@@ -7,6 +7,8 @@ use App\Models\Customer;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
 use App\Support\Customers;
+use App\Support\CustomerSchema;
+use App\Support\SessionValues;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -29,6 +31,41 @@ class CustomerController extends Controller
         $data = $request->validate(['code' => ['required', 'string', 'max:20']]);
 
         return $this->opened($request, Customers::join($request->user(), $data['code']));
+    }
+
+    /** POST /customers/{customer}/use — work in another of the person's customers. */
+    public function use(Request $request, Customer $customer): JsonResponse
+    {
+        abort_unless($request->user()->isIn($customer), 403, 'You are not in this customer.');
+        CustomerSchema::run($customer, fn () => SessionValues::refresh($request->user()));
+
+        return $this->opened($request, $customer);
+    }
+
+    /** GET /me/customers */
+    public function mine(Request $request): JsonResponse
+    {
+        return response()->json(Customers::listFor($request->user()));
+    }
+
+    /** DELETE /me/customers/{customer} — leave it (not as its last admin). */
+    public function leave(Request $request, Customer $customer): JsonResponse
+    {
+        abort_unless($request->user()->isIn($customer), 404);
+        Customers::remove($customer, $request->user());
+
+        return response()->json(['customers' => Customers::listFor($request->user())]);
+    }
+
+    /** DELETE /customer/members/{user} — an admin takes someone out of the current customer. */
+    public function removeMember(Request $request, User $user): JsonResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403, "Only the customer's admins can do this.");
+        $customer = CustomerSchema::current();
+        abort_unless($user->isIn($customer), 404);
+        Customers::remove($customer, $user);
+
+        return response()->json(['message' => __('Removed.')]);
     }
 
     /** The answer when a customer is opened: it, and a new token for it (the old one is gone). */
