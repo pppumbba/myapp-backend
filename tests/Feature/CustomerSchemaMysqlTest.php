@@ -100,6 +100,19 @@ class CustomerSchemaMysqlTest extends TestCase
         $this->assertSame([$owner->id], $admins);
     }
 
+    public function test_a_meta_in_the_address_is_read_from_the_tokens_customer(): void
+    {
+        $a = Customers::create($this->user(), 'Acme');
+        $b = Customers::create($owner = $this->user(), 'Other');
+        $meta = fn (string $code) => DB::table('metas')->insertGetId(['code' => $code, 'name' => $code, 'type_id' => DB::table('meta_types')->where('code', 'datagrid')->value('id')]);
+        CustomerSchema::run($a, fn () => [$meta('a_first'), $meta('a_second')]);
+        $id = CustomerSchema::run($b, fn () => [$meta('b_spare'), $meta('b_grid')][1]);
+        $token = Customers::bindToken($owner, $b);
+        CustomerSchema::forget();
+
+        $this->withToken($token)->getJson("/api/metas/{$id}")->assertOk()->assertJsonPath('code', 'b_grid');
+    }
+
     private function user(): User
     {
         return $this->users[] = User::factory()->create();
