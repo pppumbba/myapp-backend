@@ -3,11 +3,13 @@
 namespace App\Support;
 
 use App\Models\Customer;
+use App\Models\CustomerInvite;
 use App\Models\CustomerUser;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /** Customers a person is in, and what happens when one is made, joined or left. */
@@ -95,5 +97,54 @@ class Customers
     private static function realSchemas(): bool
     {
         return in_array(config('database.connections.customer.driver'), ['mysql', 'mariadb'], true);
+    }
+
+    /** Letters and digits of invite codes: none that look alike (0/O, 1/I/L). */
+    public const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+    /** How a typed code is looked up: upper case, without spaces or dashes. */
+    public static function normalizeCode(string $typed): string
+    {
+        return strtoupper(preg_replace('/[\s-]+/', '', $typed));
+    }
+
+    public static function newCode(): string
+    {
+        do {
+            $code = '';
+            for ($i = 0; $i < 8; $i++) {
+                $code .= self::CODE_ALPHABET[random_int(0, strlen(self::CODE_ALPHABET) - 1)];
+            }
+        } while (CustomerInvite::where('code', $code)->exists());
+
+        return $code;
+    }
+
+    /**
+     * $user joins the customer of the invite $typed, with the invite's roles (those that still
+     * exist). Already in it: nothing changes and no use is counted.
+     */
+    public static function join(User $user, string $typed): Customer
+    {
+        return DB::connection('main')->transaction(function () use ($user, $typed) {
+            $invite = CustomerInvite::where('code', self::normalizeCode($typed))->lockForUpdate()->first();
+            if (! $invite || ! $invite->isUsable()) {
+                throw ValidationException::withMessages(['code' => __('This code is not valid.')])->status(422);
+            }
+            $customer = Customer::findOrFail($invite->customer_id);
+            if ($user->isIn($customer)) {
+                return $customer;
+            }
+
+            CustomerUser::create(['customer_id' => $customer->id, 'user_id' => $user->id, 'invite_id' => $invite->id, 'joined_at' => now()]);
+            CustomerSchema::run($customer, function () use ($user, $invite) {
+                $roleIds = Role::whereIn('id', $invite->role_ids ?? [])->pluck('id')->all();
+                $user->roles()->syncWithoutDetaching($roleIds);
+                $user->forgetRoles();
+            });
+            $invite->increment('uses');
+
+            return $customer;
+        });
     }
 }

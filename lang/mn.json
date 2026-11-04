@@ -404,5 +404,7 @@
   "Only administrators can add a button that runs a stage query.": "Шатны асуулга ажиллуулах товчийг зөвхөн админ нэмж болно.",
   "Only builders with the studio can do this.": "Үүнийг зөвхөн студи эрхтэй бүтээгч хийж болно.",
   "Pick a customer.": "Харилцагчаа сонгоно уу.",
-  "You are no longer in this customer.": "Та энэ харилцагчид хамаарахаа больсон байна."
+  "You are no longer in this customer.": "Та энэ харилцагчид хамаарахаа больсон байна.",
+  "This code is not valid.": "Энэ код хүчингүй байна.",
+  "Only the customer's admins can do this.": "Үүнийг зөвхөн харилцагчийн админ хийж болно."
 }

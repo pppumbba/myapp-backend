@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\ChartController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\ContentController;
 use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\CustomerInviteController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\ExcelImportController;
 use App\Http\Controllers\Api\V1\ExcelStructureController;
@@ -79,6 +80,7 @@ Route::middleware(['auth:sanctum', 'customer:optional'])->group(function () {
     Route::put('/user', [ProfileController::class, 'update']);
     Route::put('/user/preferences', [ProfileController::class, 'preferences']);
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:customers');
+    Route::post('/customers/join', [CustomerController::class, 'join'])->middleware('throttle:customers-join');
     Route::put('/user/password', [ProfileController::class, 'password'])->middleware('throttle:password');
 });
 
@@ -161,6 +163,11 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
 
     // The signed-in user's own profile.
     Route::put('/user/theme', [ThemeController::class, 'mine']);
+
+    // Invite codes of the current customer (its admins).
+    Route::get('/customer/invites', [CustomerInviteController::class, 'index']);
+    Route::post('/customer/invites', [CustomerInviteController::class, 'store']);
+    Route::post('/customer/invites/{invite}/revoke', [CustomerInviteController::class, 'revoke'])->whereNumber('invite');
 
     // The messenger (polled; see ChatController).
     Route::get('/chats/poll', [ChatController::class, 'poll']);

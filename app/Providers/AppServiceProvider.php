@@ -77,6 +77,9 @@ class AppServiceProvider extends ServiceProvider
             Limit::perHour(10)->by('customers-ip:'.$request->ip()),
         ]);
 
+        // Guessing invite codes.
+        RateLimiter::for('customers-join', fn (Request $request) => Limit::perMinute(10)->by('customers-join:'.$request->user()?->id.'|'.$request->ip()));
+
         // Password guessing: a few tries per account from one address, and a looser cap per address
         // so one machine can't walk through many accounts.
         RateLimiter::for('login', fn (Request $request) => [

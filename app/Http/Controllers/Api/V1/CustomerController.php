@@ -23,6 +23,14 @@ class CustomerController extends Controller
         return $this->opened($request, $customer, 201);
     }
 
+    /** POST /customers/join {code} — joins the customer of an invite code with its roles. */
+    public function join(Request $request): JsonResponse
+    {
+        $data = $request->validate(['code' => ['required', 'string', 'max:20']]);
+
+        return $this->opened($request, Customers::join($request->user(), $data['code']));
+    }
+
     /** The answer when a customer is opened: it, and a new token for it (the old one is gone). */
     private function opened(Request $request, Customer $customer, int $status = 200): JsonResponse
     {
