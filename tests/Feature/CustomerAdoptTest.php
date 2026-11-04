@@ -63,8 +63,8 @@ class CustomerAdoptTest extends TestCase
 
         $kind = DB::selectOne('SELECT TABLE_TYPE FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [self::SOURCE, 'users'])->TABLE_TYPE;
         $this->assertSame('VIEW', $kind);
-        $this->assertFalse(DB::connection('customer')->getSchemaBuilder()->hasTable('personal_access_tokens'));
-        $this->assertSame(['Ann', 'Bo'], DB::connection('customer')->table('users')->orderBy('id')->pluck('name')->all());
+        $this->assertNull(DB::selectOne('SELECT 1 AS found FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [self::SOURCE, 'personal_access_tokens']));
+        $this->assertSame(['Ann', 'Bo'], DB::table(self::SOURCE.'.users')->orderBy('id')->pluck('name')->all());
     }
 
     public function test_adopting_twice_is_refused(): void

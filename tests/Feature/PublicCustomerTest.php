@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\CustomerDomain;
 use App\Models\Meta;
 use App\Models\MetaType;
+use App\Models\User;
 use App\Support\CustomerSchema;
 use App\Support\Sites;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -26,6 +27,19 @@ class PublicCustomerTest extends TestCase
         $this->assertSame($other->id, CustomerSchema::current()->id);
 
         $this->getJson("/api/c/nobody/metas/{$meta->id}")->assertNotFound();
+    }
+
+    public function test_a_signed_in_person_opening_another_customers_link_sees_that_customer(): void
+    {
+        $other = Customer::create(['code' => 'other', 'name' => 'Other', 'schema_name' => 'cust_other']);
+        $meta = $this->publicMeta();
+        $user = User::factory()->create();
+        $token = $user->createToken('t');
+        $token->accessToken->forceFill(['customer_id' => $this->testCustomer->id])->save();
+
+        $this->withToken($token->plainTextToken)->getJson("/api/c/other/metas/{$meta->id}")->assertOk();
+        $this->assertSame($other->id, CustomerSchema::current()->id);
+        $this->assertNull(auth('sanctum')->user());
     }
 
     public function test_old_public_links_use_the_first_customer(): void
