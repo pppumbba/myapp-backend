@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\CompanyMember;
 use App\Models\Customer;
 use App\Models\CustomerInvite;
 use App\Models\CustomerUser;
 use App\Models\Role;
 use App\Models\User;
+use App\Models\UserNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -16,7 +18,7 @@ class CustomerModelsTest extends TestCase
 
     public function test_a_user_lists_their_customers(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->outside()->create();
         $mine = Customer::create(['code' => 'mine', 'name' => 'Mine', 'schema_name' => 'cust_mine']);
         Customer::create(['code' => 'other', 'name' => 'Other', 'schema_name' => 'cust_other']);
         CustomerUser::create(['customer_id' => $mine->id, 'user_id' => $user->id]);
@@ -51,7 +53,10 @@ class CustomerModelsTest extends TestCase
         $user = User::factory()->create();
         $role = Role::create(['code' => 'clerk', 'name' => 'Clerk']);
 
-        $this->assertNotSame('main', $user->roles()->getRelated()->getConnectionName());
+        // Reached from User (main), these must name their connection, or they'd follow User into main.
+        foreach ([Role::class, UserNotification::class, CompanyMember::class] as $model) {
+            $this->assertSame('customer', (new $model)->getConnectionName(), $model);
+        }
         $user->roles()->attach($role->id);
         $this->assertSame([$role->id], $user->roles()->pluck('roles.id')->all());
     }
@@ -59,7 +64,7 @@ class CustomerModelsTest extends TestCase
     public function test_the_theme_is_kept_per_customer(): void
     {
         $user = User::factory()->create();
-        CustomerUser::create(['customer_id' => $this->testCustomer->id, 'user_id' => $user->id, 'theme_meta_id' => 7]);
+        CustomerUser::updateOrCreate(['customer_id' => $this->testCustomer->id, 'user_id' => $user->id], ['theme_meta_id' => 7]);
 
         $this->assertSame(7, $user->fresh()->theme_meta_id);
     }

@@ -55,7 +55,7 @@ class ScheduledForms
      */
     public static function runSchedule(Schedule $schedule, ?User $runner = null): array
     {
-        $runner ??= User::whereHas('roles', fn ($q) => $q->where('code', Role::ADMIN))->orderBy('id')->first();
+        $runner ??= User::withRole(fn ($q) => $q->where('code', Role::ADMIN))->orderBy('id')->first();
 
         return $schedule->forms()->with(['process.type', 'view'])->orderBy('id')->get()
             ->map(fn (MetaSchedule $link) => self::run($link, $runner))

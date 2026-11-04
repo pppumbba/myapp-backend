@@ -104,10 +104,10 @@ class CustomerSignInTest extends TestCase
 
     public function test_only_platform_owners_list_customers(): void
     {
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->outside()->create());
         $this->getJson('/api/platform/customers')->assertForbidden();
 
-        $owner = User::factory()->create();
+        $owner = User::factory()->outside()->create();
         $owner->forceFill(['is_platform_owner' => true])->save();
         $this->link($owner, $this->testCustomer);
         Sanctum::actingAs($owner);
@@ -116,12 +116,12 @@ class CustomerSignInTest extends TestCase
 
     private function person(): User
     {
-        return User::factory()->create(['password' => Hash::make('secret-pass-123')]);
+        return User::factory()->outside()->create(['password' => Hash::make('secret-pass-123')]);
     }
 
     private function link(User $user, Customer $customer): void
     {
-        CustomerUser::create(['customer_id' => $customer->id, 'user_id' => $user->id]);
+        CustomerUser::firstOrCreate(['customer_id' => $customer->id, 'user_id' => $user->id]);
     }
 
     private function login(User $user): TestResponse

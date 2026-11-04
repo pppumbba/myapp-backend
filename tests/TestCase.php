@@ -33,11 +33,13 @@ abstract class TestCase extends BaseTestCase
         parent::tearDown();
     }
 
-    /** In tests the main and customer connections are one in-memory database: "main" is the same connection. */
+    /** On SQLite (tests) the main and customer connections are one in-memory database: "main" is the same connection. */
     public function createApplication()
     {
         $app = parent::createApplication();
-        $app['db']->extend('main', fn () => $app['db']->connection('customer'));
+        if (config('database.connections.customer.driver') === 'sqlite') {
+            $app['db']->extend('main', fn () => $app['db']->connection('customer'));
+        }
 
         return $app;
     }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\OnCustomerSchema;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class UserNotification extends Model
 {
+    use OnCustomerSchema;
+
     public const TYPES = ['info', 'success', 'alert', 'danger'];
 
     public const UPDATED_AT = null;

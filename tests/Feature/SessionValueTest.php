@@ -29,7 +29,7 @@ class SessionValueTest extends TestCase
         $this->seed(ProcurementDemoSeeder::class);
         $this->admin = User::factory()->admin()->create(['email' => 'admin@example.com']);
         // Signing in works the values out in the person's customer.
-        CustomerUser::create(['customer_id' => $this->testCustomer->id, 'user_id' => $this->admin->id]);
+        CustomerUser::firstOrCreate(['customer_id' => $this->testCustomer->id, 'user_id' => $this->admin->id]);
 
         Schema::create('test_employees', function (Blueprint $table) {
             $table->id();

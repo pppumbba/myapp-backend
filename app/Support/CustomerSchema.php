@@ -20,12 +20,15 @@ class CustomerSchema
 
     private static ?string $baseCachePrefix = null;
 
+    private static ?string $baseDatabase = null;
+
     public static function use(Customer $customer): void
     {
         if (self::$current && self::$current->id === $customer->id && self::$current->schema_name === $customer->schema_name) {
             return;
         }
         self::$baseCachePrefix ??= (string) config('cache.prefix');
+        self::$baseDatabase ??= (string) config('database.connections.customer.database');
 
         if (config('database.connections.customer.driver') !== 'sqlite'
             && config('database.connections.customer.database') !== $customer->schema_name) {
@@ -64,9 +67,13 @@ class CustomerSchema
         }
     }
 
-    /** No customer: the cache goes back to the plain prefix. */
+    /** No customer: the connection, cache and files go back to where they were before any. */
     public static function forget(): void
     {
+        if (self::$baseDatabase !== null && config('database.connections.customer.database') !== self::$baseDatabase) {
+            config(['database.connections.customer.database' => self::$baseDatabase]);
+            DB::purge('customer');
+        }
         if (self::$baseCachePrefix !== null) {
             config(['cache.prefix' => self::$baseCachePrefix]);
             Cache::forgetDriver(array_keys(config('cache.stores')));

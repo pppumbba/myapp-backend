@@ -27,7 +27,7 @@ class CustomerInviteTest extends TestCase
             ->json('code');
         $this->assertMatchesRegularExpression('/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/', $code);
 
-        $joiner = User::factory()->create();
+        $joiner = User::factory()->outside()->create();
         $this->joinAs($joiner, $code)->assertOk()->assertJsonPath('customer.code', 'test');
 
         $this->assertTrue($joiner->isIn($this->testCustomer));
@@ -39,13 +39,13 @@ class CustomerInviteTest extends TestCase
     {
         $this->invite(['code' => 'ABCD2345']);
 
-        $this->joinAs(User::factory()->create(), ' abcd-2345 ')->assertOk();
+        $this->joinAs(User::factory()->outside()->create(), ' abcd-2345 ')->assertOk();
     }
 
     public function test_joining_twice_keeps_one_membership(): void
     {
         $this->invite(['code' => 'ABCD2345']);
-        $joiner = User::factory()->create();
+        $joiner = User::factory()->outside()->create();
 
         $this->joinAs($joiner, 'ABCD2345')->assertOk();
         $this->joinAs($joiner, 'ABCD2345')->assertOk();
@@ -59,14 +59,14 @@ class CustomerInviteTest extends TestCase
         $this->invite(['code' => 'REVK2345', 'revoked_at' => now()]);
         $this->invite(['code' => 'USED2345', 'max_uses' => 1, 'uses' => 1]);
 
-        $this->joinAs(User::factory()->create(), 'REVK2345')->assertStatus(422)->assertJsonPath('message', 'This code is not valid.');
-        $this->joinAs(User::factory()->create(), 'USED2345')->assertStatus(422);
-        $this->joinAs(User::factory()->create(), 'NOPE2345')->assertStatus(422);
+        $this->joinAs(User::factory()->outside()->create(), 'REVK2345')->assertStatus(422)->assertJsonPath('message', 'This code is not valid.');
+        $this->joinAs(User::factory()->outside()->create(), 'USED2345')->assertStatus(422);
+        $this->joinAs(User::factory()->outside()->create(), 'NOPE2345')->assertStatus(422);
     }
 
     public function test_non_admins_cannot_manage_invites(): void
     {
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->outside()->create());
 
         $this->getJson('/api/customer/invites')->assertForbidden();
         $this->postJson('/api/customer/invites', ['role_ids' => []])->assertForbidden();
@@ -96,7 +96,7 @@ class CustomerInviteTest extends TestCase
     private function admin(): User
     {
         $admin = User::factory()->admin()->create();
-        CustomerUser::create(['customer_id' => $this->testCustomer->id, 'user_id' => $admin->id]);
+        CustomerUser::firstOrCreate(['customer_id' => $this->testCustomer->id, 'user_id' => $admin->id]);
 
         return $admin;
     }

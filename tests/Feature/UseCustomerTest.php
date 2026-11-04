@@ -55,7 +55,7 @@ class UseCustomerTest extends TestCase
     private function member(bool $bound = false): array
     {
         $user = User::factory()->create();
-        CustomerUser::create(['customer_id' => $this->testCustomer->id, 'user_id' => $user->id]);
+        CustomerUser::firstOrCreate(['customer_id' => $this->testCustomer->id, 'user_id' => $user->id]);
         $token = $user->createToken('t');
         if ($bound) {
             $token->accessToken->forceFill(['customer_id' => $this->testCustomer->id])->save();

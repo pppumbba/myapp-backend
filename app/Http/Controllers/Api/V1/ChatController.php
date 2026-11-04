@@ -176,7 +176,7 @@ class ChatController extends Controller
     public function people(Request $request): JsonResponse
     {
         $q = trim((string) $request->query('q', ''));
-        $people = User::query()->whereKeyNot($request->user()->id)
+        $people = User::inCurrentCustomer()->whereKeyNot($request->user()->id)
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w->where('name', 'like', '%'.addcslashes($q, '%_\\').'%')->orWhere('email', 'like', '%'.addcslashes($q, '%_\\').'%')))
             ->orderBy('name')->limit(20)->get(['id', 'name', 'email']);
 

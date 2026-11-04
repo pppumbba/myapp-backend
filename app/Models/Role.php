@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\OnCustomerSchema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  */
 class Role extends Model
 {
+    use OnCustomerSchema;
+
     public const ADMIN = 'admin';
 
     /** What a role's features may hold. */

@@ -73,6 +73,28 @@ class CustomerSchemaMysqlTest extends TestCase
         $this->assertFalse(DB::connection('main')->table('customer_users')->where('user_id', $user->id)->exists());
     }
 
+    public function test_the_users_view_shows_only_members_and_no_password(): void
+    {
+        $a = Customers::create($owner = $this->user(), 'Acme');
+        $b = Customers::create($other = $this->user(), 'Other');
+
+        CustomerSchema::run($a, function () use ($owner) {
+            $this->assertSame([$owner->id], DB::table('users')->pluck('id')->map(fn ($id) => (int) $id)->all());
+            $this->assertNotContains('password', DB::getSchemaBuilder()->getColumnListing('users'));
+        });
+        CustomerSchema::run($b, fn () => $this->assertSame([$other->id], DB::table('users')->pluck('id')->map(fn ($id) => (int) $id)->all()));
+    }
+
+    public function test_with_role_works_across_the_two_schemas(): void
+    {
+        $a = Customers::create($owner = $this->user(), 'Acme');
+        Customers::create($this->user(), 'Other');
+
+        $admins = CustomerSchema::run($a, fn () => User::withRole(fn ($q) => $q->where('code', 'admin'))->pluck('id')->all());
+
+        $this->assertSame([$owner->id], $admins);
+    }
+
     private function user(): User
     {
         return $this->users[] = User::factory()->create();

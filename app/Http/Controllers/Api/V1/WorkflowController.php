@@ -203,7 +203,7 @@ class WorkflowController extends Controller
         $status = WfmStatus::find($transition->next_status_id);
         $mover = $request->user();
         $now = now();
-        $notifications = User::whereHas('roles', fn ($q) => $q->whereIn('roles.id', $roles))
+        $notifications = User::withRole(fn ($q) => $q->whereIn('id', $roles))
             ->when($mover, fn ($q) => $q->whereKeyNot($mover->id))
             ->pluck('id')
             ->map(fn ($userId) => [
