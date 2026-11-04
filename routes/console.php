@@ -1,8 +1,11 @@
 <?php
 
 use App\Models\Company;
+use App\Models\Customer;
 use App\Models\Schedule as ScheduleModel;
 use App\Support\Contents;
+use App\Support\CoreStructure;
+use App\Support\CustomerSchema;
 use App\Support\Market\Companies;
 use App\Support\Market\Escrow;
 use App\Support\Market\Tenders;
@@ -72,3 +75,29 @@ Artisan::command('market:close-tenders', function () {
 })->purpose('Close tenders and final rounds whose time is up');
 
 Schedule::command('market:close-tenders')->everyMinute()->withoutOverlapping();
+
+/** Writes database/schema/customer-core.sql from this schema: what every new customer schema starts from. */
+Artisan::command('customers:dump-core', function () {
+    file_put_contents(database_path(CoreStructure::FILE), CoreStructure::dump());
+    $this->info('Wrote '.database_path(CoreStructure::FILE));
+})->purpose('Write the core structure new customer schemas are made from');
+
+/**
+ * Runs the customer migrations in every customer's schema (or one, by code), going on after a
+ * failure; the main schema's own migrations run apart (migrate --database=main --path=database/migrations/main).
+ */
+Artisan::command('customers:migrate {--customer= : Only this customer code}', function () {
+    $failed = false;
+    $customers = Customer::query()->when($this->option('customer'), fn ($q, $code) => $q->where('code', $code))->orderBy('id')->get();
+    foreach ($customers as $customer) {
+        try {
+            CustomerSchema::run($customer, fn () => Artisan::call('migrate', ['--database' => 'customer', '--path' => 'database/migrations', '--force' => true]));
+            $this->line("{$customer->code}: ok");
+        } catch (Throwable $e) {
+            $failed = true;
+            $this->error("{$customer->code}: FAILED {$e->getMessage()}");
+        }
+    }
+
+    return $failed ? 1 : 0;
+})->purpose('Migrate every customer schema');
