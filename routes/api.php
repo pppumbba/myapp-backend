@@ -71,10 +71,19 @@ Route::get('/contents/{content}', [ContentController::class, 'show'])->whereNumb
 // The payment provider tells us an invoice changed; we ask the provider again rather than trust it.
 Route::match(['get', 'post'], '/market/payments/{payment}/callback', [PaymentController::class, 'callback'])->whereNumber('payment')->middleware('throttle:60,1');
 
-Route::middleware('auth:sanctum')->group(function () {
+// Signed in, inside a customer or not yet: the profile and leaving.
+Route::middleware(['auth:sanctum', 'customer:optional'])->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user', [ProfileController::class, 'show']);
+    Route::put('/user', [ProfileController::class, 'update']);
+    Route::put('/user/preferences', [ProfileController::class, 'preferences']);
+    Route::put('/user/password', [ProfileController::class, 'password'])->middleware('throttle:password');
+});
+
+// Everything else runs inside the customer the login token is for (UseCustomer).
+Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     Route::get('/meta-types', [MetaTypeController::class, 'index']);
     Route::get('/metas/options', [MetaController::class, 'options']);
-    Route::post('/logout', [AuthController::class, 'logout']);
 
     // The market: verifying people (DAN) and the companies they act for (ХУР).
     Route::post('/market/dan/start', [DanController::class, 'start'])->middleware('throttle:login');
@@ -149,10 +158,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/market/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->whereNumber('payment');
 
     // The signed-in user's own profile.
-    Route::get('/user', [ProfileController::class, 'show']);
-    Route::put('/user', [ProfileController::class, 'update']);
     Route::put('/user/theme', [ThemeController::class, 'mine']);
-    Route::put('/user/preferences', [ProfileController::class, 'preferences']);
 
     // The messenger (polled; see ChatController).
     Route::get('/chats/poll', [ChatController::class, 'poll']);
@@ -178,7 +184,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/metas/{meta}/translations/import', [TranslationController::class, 'import'])->middleware('meta.version');
     Route::get('/themes', [ThemeController::class, 'index']);
     Route::put('/metas/{meta}/theme', [ThemeController::class, 'save'])->middleware('meta.version');
-    Route::put('/user/password', [ProfileController::class, 'password'])->middleware('throttle:password');
     Route::get('/user/session', [SessionValueController::class, 'mine']);
     Route::post('/user/session/refresh', [SessionValueController::class, 'refresh']);
     Route::post('/session-values/test', [SessionValueController::class, 'test']);
@@ -354,7 +359,7 @@ Route::middleware('auth:sanctum')->group(function () {
  * (public metas may be opened and added to by anyone, e.g. a portal). Guests are rate limited.
  * Registered last, so fixed paths such as /metas/options win over /metas/{meta}.
  */
-Route::middleware(['auth.optional', 'throttle:public'])->group(function () {
+Route::middleware(['auth.optional', 'customer:optional', 'throttle:public'])->group(function () {
     Route::get('/user/access', [AccessController::class, 'show']);
     // A website's published page, by its domain or code (PublicSiteController).
     Route::get('/site', [PublicSiteController::class, 'show']);

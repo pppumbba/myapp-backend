@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Support\Customers;
+use App\Support\CustomerSchema;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -15,7 +17,11 @@ class ProfileController extends Controller
     /** GET /user */
     public function show(Request $request): JsonResponse
     {
-        return response()->json($request->user());
+        // The customer this login works in (null: none picked yet) and all the person's customers.
+        return response()->json($request->user()->toArray() + [
+            'customer' => CustomerSchema::current()?->only(['id', 'code', 'name']),
+            'customers' => Customers::listFor($request->user()),
+        ]);
     }
 
     /** PUT /user */

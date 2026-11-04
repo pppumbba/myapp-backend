@@ -4,6 +4,7 @@ use App\Exceptions\ServiceException;
 use App\Http\Middleware\AuthenticateOptionally;
 use App\Http\Middleware\SavesMetaVersion;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\UseCustomer;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,7 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => null);
         // Behind Render's (or any) proxy: https and the real host come from X-Forwarded-* headers.
         $middleware->trustProxies(at: '*');
-        $middleware->alias(['meta.version' => SavesMetaVersion::class, 'auth.optional' => AuthenticateOptionally::class]);
+        $middleware->alias(['meta.version' => SavesMetaVersion::class, 'auth.optional' => AuthenticateOptionally::class, 'customer' => UseCustomer::class]);
         $middleware->api(append: SetLocale::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
