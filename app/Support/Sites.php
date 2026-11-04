@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\CustomerDomain;
 use App\Models\Meta;
 use App\Models\MetaParam;
 use App\Models\MetaType;
@@ -536,10 +537,28 @@ class Sites
             }
         }
         $primary ??= array_key_first($hosts);
+        self::claimDomains(array_keys($hosts));
 
         SiteDomain::where('site_meta_id', $site->id)->whereNotIn('host', array_keys($hosts))->delete();
         foreach (array_keys($hosts) as $host) {
             SiteDomain::updateOrCreate(['host' => $host], ['site_meta_id' => $site->id, 'is_primary' => $host === $primary]);
+        }
+        // Hosts no website of this customer uses any more are free for others again.
+        CustomerDomain::where('customer_id', CustomerSchema::current()?->id)->whereNotIn('domain', SiteDomain::pluck('host'))->delete();
+    }
+
+    /**
+     * The current customer takes these hosts, so guests opening them land in its schema. A host
+     * another customer has is refused.
+     *
+     * @param  list<string>  $hosts
+     */
+    public static function claimDomains(array $hosts): void
+    {
+        $customer = CustomerSchema::current();
+        abort_if(CustomerDomain::whereIn('domain', $hosts)->where('customer_id', '!=', $customer->id)->exists(), 422, __('This domain is used by another customer.'));
+        foreach ($hosts as $host) {
+            CustomerDomain::firstOrCreate(['domain' => $host], ['customer_id' => $customer->id]);
         }
     }
 
