@@ -41,7 +41,9 @@ class UseCustomerTest extends TestCase
         $this->withToken($token)->getJson('/api/user')
             ->assertOk()
             ->assertJsonPath('customer.code', 'test')
-            ->assertJsonPath('customers.0.code', 'test');
+            ->assertJsonPath('customers.0.code', 'test')
+            // A real boolean: the account menu would render a bare 0 and crash.
+            ->assertJsonPath('is_platform_owner', false);
     }
 
     public function test_user_without_a_customer_still_answers(): void

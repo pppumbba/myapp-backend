@@ -178,6 +178,7 @@ class User extends Authenticatable
             'verified_at' => 'datetime',
             'password' => 'hashed',
             'preferences' => 'array',
+            'is_platform_owner' => 'boolean',
         ];
     }
 }
