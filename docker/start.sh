@@ -40,7 +40,8 @@ trap 'kill -TERM "$APACHE"' TERM INT
 # schema. Before the database is adopted (php artisan customers:adopt, once, by hand) there are no
 # customers yet and the old single schema migrates as before.
 if [ -n "${DB_MAIN_DATABASE:-}" ]; then
-    as_web php artisan migrate --database=main --path=database/migrations/main --force \n        || echo "MAIN MIGRATIONS FAILED. See the error above." >&2
+    as_web php artisan migrate --database=main --path=database/migrations/main --force \
+        || echo "MAIN MIGRATIONS FAILED. See the error above." >&2
     if ! as_web php artisan customers:migrate; then
         echo "CUSTOMER MIGRATIONS FAILED for the customers marked FAILED above." >&2
     fi
