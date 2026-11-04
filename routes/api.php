@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChartController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\ContentController;
+use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\ExcelImportController;
 use App\Http\Controllers\Api\V1\ExcelStructureController;
@@ -77,6 +78,7 @@ Route::middleware(['auth:sanctum', 'customer:optional'])->group(function () {
     Route::get('/user', [ProfileController::class, 'show']);
     Route::put('/user', [ProfileController::class, 'update']);
     Route::put('/user/preferences', [ProfileController::class, 'preferences']);
+    Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:customers');
     Route::put('/user/password', [ProfileController::class, 'password'])->middleware('throttle:password');
 });
 

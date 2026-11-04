@@ -9,6 +9,9 @@ return [
     /** New customer schemas are named this plus a random part. */
     'schema_prefix' => 'cust_',
 
+    /** What new schemas are built from (App\Support\CoreStructure). */
+    'core_file' => database_path('schema/customer-core.sql'),
+
     /** The customer that adopted the database the app had before customers existed. */
     'first_code' => env('CUSTOMER_FIRST_CODE', 'main'),
 

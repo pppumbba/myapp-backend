@@ -71,6 +71,12 @@ class AppServiceProvider extends ServiceProvider
             ...($request->isMethod('GET') ? [] : [Limit::perMinute(20)->by('public-send:'.$request->ip())]),
         ]);
 
+        // Making a customer makes a schema: a few per person and per address (until pricing limits it).
+        RateLimiter::for('customers', fn (Request $request) => [
+            Limit::perHour(3)->by('customers:'.$request->user()?->id),
+            Limit::perHour(10)->by('customers-ip:'.$request->ip()),
+        ]);
+
         // Password guessing: a few tries per account from one address, and a looser cap per address
         // so one machine can't walk through many accounts.
         RateLimiter::for('login', fn (Request $request) => [
