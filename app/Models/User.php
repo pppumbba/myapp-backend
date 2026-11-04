@@ -4,9 +4,11 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Models\Concerns\OnMainSchema;
+use App\Support\CustomerSchema;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,12 +16,15 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'theme_mode', 'theme_meta_id', 'ui_size', 'preferences', 'locale'])]
+#[Fillable(['name', 'email', 'password', 'theme_mode', 'ui_size', 'preferences', 'locale'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, OnMainSchema;
+
+    /** @var list<string> */
+    protected $appends = ['theme_meta_id'];
 
     /**
      * A new account. The very first account runs the place: it gets the admin role.
@@ -82,7 +87,7 @@ class User extends Authenticatable
     public function forgetRoles(): void
     {
         foreach (['is_admin', 'role_ids', 'features'] as $key) {
-            request()->attributes->remove("user.{$this->id}.{$key}");
+            request()->attributes->remove(self::requestKey($this->id, $key));
         }
     }
 
@@ -93,12 +98,37 @@ class User extends Authenticatable
     private function perRequest(string $key, callable $value): mixed
     {
         $cache = request()->attributes;
-        $key = "user.{$this->id}.{$key}";
+        $key = self::requestKey($this->id, $key);
         if (! $cache->has($key)) {
             $cache->set($key, $value());
         }
 
         return $cache->get($key);
+    }
+
+    /** Roles differ per customer, so what perRequest() keeps is kept per customer too. */
+    private static function requestKey(int $userId, string $key): string
+    {
+        return 'user.'.$userId.'.c'.(CustomerSchema::current()?->id ?? 0).'.'.$key;
+    }
+
+    /** The customers this person is in. */
+    public function customers(): BelongsToMany
+    {
+        return $this->belongsToMany(Customer::class, 'customer_users')->orderBy('name');
+    }
+
+    public function isIn(Customer $customer): bool
+    {
+        return CustomerUser::where('customer_id', $customer->id)->where('user_id', $this->id)->exists();
+    }
+
+    /** The theme picked in the current customer (a meta of that customer); none outside a customer. */
+    protected function themeMetaId(): Attribute
+    {
+        return Attribute::get(fn () => ($customer = CustomerSchema::current()) && $this->id
+            ? CustomerUser::where('customer_id', $customer->id)->where('user_id', $this->id)->value('theme_meta_id')
+            : null);
     }
 
     /** The companies this user acts for, with their rights in each. */

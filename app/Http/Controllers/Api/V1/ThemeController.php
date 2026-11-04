@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\CustomerUser;
 use App\Models\Meta;
 use App\Models\MetaType;
 use App\Support\Access;
+use App\Support\CustomerSchema;
 use App\Support\Themes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,9 +42,13 @@ class ThemeController extends Controller
             'theme_meta_id' => ['nullable', 'integer', Rule::exists('metas', 'id')->where('type_id', MetaType::where('code', 'theme')->value('id'))],
             'size' => ['sometimes', 'nullable', Rule::in(['sm', 'md', 'lg'])],
         ]);
+        // The theme is a meta of this customer, so it is kept on the person's place in it.
+        CustomerUser::updateOrCreate(
+            ['customer_id' => CustomerSchema::current()->id, 'user_id' => $request->user()->id],
+            ['theme_meta_id' => $data['theme_meta_id'] ?? null],
+        );
         $request->user()->update([
             'theme_mode' => $data['mode'] ?? null,
-            'theme_meta_id' => $data['theme_meta_id'] ?? null,
             ...array_key_exists('size', $data) ? ['ui_size' => $data['size'] === 'md' ? null : $data['size']] : [],
         ]);
 
