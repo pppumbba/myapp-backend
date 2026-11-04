@@ -5,6 +5,7 @@ use App\Models\Customer;
 use App\Models\Schedule as ScheduleModel;
 use App\Support\Contents;
 use App\Support\CoreStructure;
+use App\Support\CustomerAdopt;
 use App\Support\CustomerSchema;
 use App\Support\Market\Companies;
 use App\Support\Market\Escrow;
@@ -120,3 +121,27 @@ Artisan::command('customers:each {name : The command to run} {--only= : Only thi
 
     return $failed ? 1 : 0;
 })->purpose('Run a command in every customer');
+
+/**
+ * Makes the database from before customers the first customer (CustomerAdopt). DB_MAIN_DATABASE
+ * must name a new database. --dry-run only says what would move. Take a dump first.
+ */
+Artisan::command('customers:adopt {--name= : The first customer\'s name} {--dry-run}', function () {
+    $plan = CustomerAdopt::plan();
+    foreach ($plan['tables'] as $table => $rows) {
+        $this->line("{$table}: {$rows} rows");
+    }
+    $this->line("{$plan['users']} users and {$plan['tokens']} tokens join the first customer.");
+    if ($this->option('dry-run')) {
+        return 0;
+    }
+    if (! $this->option('name')) {
+        $this->error('Give the first customer a --name.');
+
+        return 1;
+    }
+    $customer = CustomerAdopt::run($this->option('name'));
+    $this->info("Adopted as customer {$customer->code} (schema {$customer->schema_name}).");
+
+    return 0;
+})->purpose('Make the existing database the first customer');

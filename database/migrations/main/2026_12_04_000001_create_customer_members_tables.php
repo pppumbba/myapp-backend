@@ -49,12 +49,17 @@ return new class extends Migration
             $table->unsignedBigInteger('customer_id')->index();
         });
 
-        $schema->table('personal_access_tokens', function (Blueprint $table) {
-            $table->unsignedBigInteger('customer_id')->nullable()->index();
-        });
-        $schema->table('users', function (Blueprint $table) {
-            $table->boolean('is_platform_owner')->default(false);
-        });
+        // Adopted tables may come with these already (a database migrated once before).
+        if (! $schema->hasColumn('personal_access_tokens', 'customer_id')) {
+            $schema->table('personal_access_tokens', function (Blueprint $table) {
+                $table->unsignedBigInteger('customer_id')->nullable()->index();
+            });
+        }
+        if (! $schema->hasColumn('users', 'is_platform_owner')) {
+            $schema->table('users', function (Blueprint $table) {
+                $table->boolean('is_platform_owner')->default(false);
+            });
+        }
     }
 
     public function down(): void

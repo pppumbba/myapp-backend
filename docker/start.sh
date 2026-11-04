@@ -36,7 +36,15 @@ apache2-foreground &
 APACHE=$!
 trap 'kill -TERM "$APACHE"' TERM INT
 
-if ! as_web php artisan migrate --force; then
+# Customers as schemas: the main schema (users, logins) migrates on its own, then every customer's
+# schema. Before the database is adopted (php artisan customers:adopt, once, by hand) there are no
+# customers yet and the old single schema migrates as before.
+if [ -n "${DB_MAIN_DATABASE:-}" ]; then
+    as_web php artisan migrate --database=main --path=database/migrations/main --force \n        || echo "MAIN MIGRATIONS FAILED. See the error above." >&2
+    if ! as_web php artisan customers:migrate; then
+        echo "CUSTOMER MIGRATIONS FAILED for the customers marked FAILED above." >&2
+    fi
+elif ! as_web php artisan migrate --force; then
     echo "MIGRATIONS FAILED: the site is running on an older database. See the error above." >&2
 fi
 
