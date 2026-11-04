@@ -2,9 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Middleware\InCustomer;
 use App\Mail\NotificationMail;
 use App\Models\User;
 use App\Models\UserNotification;
+use App\Support\CustomerSchema;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Mail;
@@ -21,7 +23,19 @@ class SendNotificationEmail implements ShouldQueue
     use Queueable;
 
     /** @param  list<int>  $ids  user_notifications rows */
-    public function __construct(public array $ids) {}
+    /** The customer the notifications belong to: the job runs inside it (InCustomer). */
+    public ?int $customerId;
+
+    public function __construct(public array $ids)
+    {
+        $this->customerId = CustomerSchema::current()?->id;
+    }
+
+    /** @return list<object> */
+    public function middleware(): array
+    {
+        return [new InCustomer];
+    }
 
     public function handle(): void
     {
