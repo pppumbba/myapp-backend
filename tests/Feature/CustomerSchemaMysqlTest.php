@@ -20,19 +20,24 @@ class CustomerSchemaMysqlTest extends TestCase
     /** @var list<User> */
     private array $users = [];
 
+    /** @var list<string> customer schemas that were there before the test: never dropped */
+    private array $before = [];
+
     protected function setUp(): void
     {
         parent::setUp();
         if (! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true) || ! str_ends_with((string) DB::getDatabaseName(), '_customertest')) {
             $this->markTestSkipped('Needs a MySQL or MariaDB database named *_customertest.');
         }
+        $this->before = $this->schemas();
     }
 
     protected function tearDown(): void
     {
         if (in_array(DB::getDriverName(), ['mysql', 'mariadb'], true) && str_ends_with((string) DB::getDatabaseName(), '_customertest')) {
             CustomerSchema::forget();
-            foreach ($this->schemas() as $schema) {
+            // Only what this test made: the server may hold real customers (a converted local database).
+            foreach (array_diff($this->schemas(), $this->before) as $schema) {
                 DB::statement("DROP DATABASE IF EXISTS `{$schema}`");
             }
             $ids = array_map(fn (User $u) => $u->id, $this->users);
