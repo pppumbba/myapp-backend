@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ChartController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\ContentController;
+use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\CustomerInviteController;
 use App\Http\Controllers\Api\V1\DocumentController;
 use App\Http\Controllers\Api\V1\ExcelImportController;
 use App\Http\Controllers\Api\V1\ExcelStructureController;
@@ -38,6 +40,7 @@ use App\Http\Controllers\Api\V1\NotificationRuleController;
 use App\Http\Controllers\Api\V1\PageController;
 use App\Http\Controllers\Api\V1\PatchController;
 use App\Http\Controllers\Api\V1\PermissionController;
+use App\Http\Controllers\Api\V1\PlatformController;
 use App\Http\Controllers\Api\V1\ProcessFlowController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\PublicSiteController;
@@ -71,10 +74,25 @@ Route::get('/contents/{content}', [ContentController::class, 'show'])->whereNumb
 // The payment provider tells us an invoice changed; we ask the provider again rather than trust it.
 Route::match(['get', 'post'], '/market/payments/{payment}/callback', [PaymentController::class, 'callback'])->whereNumber('payment')->middleware('throttle:60,1');
 
-Route::middleware('auth:sanctum')->group(function () {
+// Signed in, inside a customer or not yet: the profile and leaving.
+Route::middleware(['auth:sanctum', 'customer:optional'])->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/user', [ProfileController::class, 'show']);
+    Route::put('/user', [ProfileController::class, 'update']);
+    Route::put('/user/preferences', [ProfileController::class, 'preferences']);
+    Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:customers');
+    Route::post('/customers/join', [CustomerController::class, 'join'])->middleware('throttle:customers-join');
+    Route::post('/customers/{customer}/use', [CustomerController::class, 'use'])->whereNumber('customer');
+    Route::get('/me/customers', [CustomerController::class, 'mine']);
+    Route::delete('/me/customers/{customer}', [CustomerController::class, 'leave'])->whereNumber('customer');
+    Route::get('/platform/customers', [PlatformController::class, 'customers']);
+    Route::put('/user/password', [ProfileController::class, 'password'])->middleware('throttle:password');
+});
+
+// Everything else runs inside the customer the login token is for (UseCustomer).
+Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     Route::get('/meta-types', [MetaTypeController::class, 'index']);
     Route::get('/metas/options', [MetaController::class, 'options']);
-    Route::post('/logout', [AuthController::class, 'logout']);
 
     // The market: verifying people (DAN) and the companies they act for (ХУР).
     Route::post('/market/dan/start', [DanController::class, 'start'])->middleware('throttle:login');
@@ -149,10 +167,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/market/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->whereNumber('payment');
 
     // The signed-in user's own profile.
-    Route::get('/user', [ProfileController::class, 'show']);
-    Route::put('/user', [ProfileController::class, 'update']);
     Route::put('/user/theme', [ThemeController::class, 'mine']);
-    Route::put('/user/preferences', [ProfileController::class, 'preferences']);
+
+    // The current customer's people and invite codes (its admins).
+    Route::delete('/customer/members/{user}', [CustomerController::class, 'removeMember'])->whereNumber('user');
+    Route::get('/customer/invites', [CustomerInviteController::class, 'index']);
+    Route::post('/customer/invites', [CustomerInviteController::class, 'store']);
+    Route::post('/customer/invites/{invite}/revoke', [CustomerInviteController::class, 'revoke'])->whereNumber('invite');
 
     // The messenger (polled; see ChatController).
     Route::get('/chats/poll', [ChatController::class, 'poll']);
@@ -178,7 +199,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/metas/{meta}/translations/import', [TranslationController::class, 'import'])->middleware('meta.version');
     Route::get('/themes', [ThemeController::class, 'index']);
     Route::put('/metas/{meta}/theme', [ThemeController::class, 'save'])->middleware('meta.version');
-    Route::put('/user/password', [ProfileController::class, 'password'])->middleware('throttle:password');
     Route::get('/user/session', [SessionValueController::class, 'mine']);
     Route::post('/user/session/refresh', [SessionValueController::class, 'refresh']);
     Route::post('/session-values/test', [SessionValueController::class, 'test']);
@@ -354,7 +374,7 @@ Route::middleware('auth:sanctum')->group(function () {
  * (public metas may be opened and added to by anyone, e.g. a portal). Guests are rate limited.
  * Registered last, so fixed paths such as /metas/options win over /metas/{meta}.
  */
-Route::middleware(['auth.optional', 'throttle:public'])->group(function () {
+$publicRoutes = function () {
     Route::get('/user/access', [AccessController::class, 'show']);
     // A website's published page, by its domain or code (PublicSiteController).
     Route::get('/site', [PublicSiteController::class, 'show']);
@@ -379,4 +399,8 @@ Route::middleware(['auth.optional', 'throttle:public'])->group(function () {
 
     // Files for a form's singlefile and multifile fields, attached to the record when it saves.
     Route::post('/metas/{meta}/files', [ContentController::class, 'store']);
-});
+};
+
+// Guests find the customer from the address: /c/{code}/… or, for old links and own domains, without it.
+Route::middleware(['auth.optional', 'customer:optional', 'customer.public', 'throttle:public'])->group($publicRoutes);
+Route::prefix('c/{customer_code}')->middleware(['auth.optional', 'customer:optional', 'customer.public', 'throttle:public'])->group($publicRoutes);

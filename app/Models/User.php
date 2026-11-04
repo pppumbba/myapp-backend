@@ -3,38 +3,41 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Concerns\OnMainSchema;
+use App\Support\CustomerSchema;
+use Closure;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'theme_mode', 'theme_meta_id', 'ui_size', 'preferences', 'locale'])]
+#[Fillable(['name', 'email', 'password', 'theme_mode', 'ui_size', 'preferences', 'locale'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, OnMainSchema;
+
+    /** @var list<string> */
+    protected $appends = ['theme_meta_id'];
 
     /**
-     * A new account. The very first account runs the place: it gets the admin role.
+     * A new account. It is in no customer yet: the person makes one (and is its admin) or joins
+     * one with an invite code next.
      *
      * @param  array<string, mixed>  $attributes
      */
     public static function startAccount(array $attributes): self
     {
-        $first = ! self::exists();
-        $user = self::create($attributes);
-        if ($first) {
-            $user->roles()->attach(Role::firstOrCreate(['code' => Role::ADMIN], ['name' => 'Administrator'])->id);
-            $user->forgetRoles();
-        }
-
-        return $user;
+        return self::create($attributes);
     }
 
     /** Sign-in accounts at other providers (Google) linked to this user. */
@@ -81,7 +84,7 @@ class User extends Authenticatable
     public function forgetRoles(): void
     {
         foreach (['is_admin', 'role_ids', 'features'] as $key) {
-            request()->attributes->remove("user.{$this->id}.{$key}");
+            request()->attributes->remove(self::requestKey($this->id, $key));
         }
     }
 
@@ -92,12 +95,57 @@ class User extends Authenticatable
     private function perRequest(string $key, callable $value): mixed
     {
         $cache = request()->attributes;
-        $key = "user.{$this->id}.{$key}";
+        $key = self::requestKey($this->id, $key);
         if (! $cache->has($key)) {
             $cache->set($key, $value());
         }
 
         return $cache->get($key);
+    }
+
+    /** Roles differ per customer, so what perRequest() keeps is kept per customer too. */
+    private static function requestKey(int $userId, string $key): string
+    {
+        return 'user.'.$userId.'.c'.(CustomerSchema::current()?->id ?? 0).'.'.$key;
+    }
+
+    /** The customers this person is in. */
+    public function customers(): BelongsToMany
+    {
+        return $this->belongsToMany(Customer::class, 'customer_users')->orderBy('name');
+    }
+
+    public function isIn(Customer $customer): bool
+    {
+        return CustomerUser::where('customer_id', $customer->id)->where('user_id', $this->id)->exists();
+    }
+
+    /** Only the people in the current customer (everyone when no customer is current). */
+    public function scopeInCurrentCustomer(Builder $query): void
+    {
+        if ($customer = CustomerSchema::current()) {
+            $query->whereIn('id', CustomerUser::where('customer_id', $customer->id)->pluck('user_id'));
+        }
+    }
+
+    /**
+     * People of the current customer with a role matching $roles (a query on roles). Roles live in
+     * the customer's schema and users in the main one, so this asks the customer first.
+     */
+    public function scopeWithRole(Builder $query, Closure $roles): void
+    {
+        $ids = DB::connection('customer')->table('user_roles')
+            ->whereIn('role_id', $roles(Role::query())->select('id'))
+            ->distinct()->pluck('user_id');
+        $query->whereIn('id', $ids)->inCurrentCustomer();
+    }
+
+    /** The theme picked in the current customer (a meta of that customer); none outside a customer. */
+    protected function themeMetaId(): Attribute
+    {
+        return Attribute::get(fn () => ($customer = CustomerSchema::current()) && $this->id
+            ? CustomerUser::where('customer_id', $customer->id)->where('user_id', $this->id)->value('theme_meta_id')
+            : null);
     }
 
     /** The companies this user acts for, with their rights in each. */
@@ -130,6 +178,7 @@ class User extends Authenticatable
             'verified_at' => 'datetime',
             'password' => 'hashed',
             'preferences' => 'array',
+            'is_platform_owner' => 'boolean',
         ];
     }
 }

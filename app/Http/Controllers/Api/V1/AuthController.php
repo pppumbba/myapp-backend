@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Customers;
 use App\Support\SessionValues;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
@@ -16,7 +18,7 @@ class AuthController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'email', 'max:255', Rule::unique(User::class, 'email')],
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
@@ -26,10 +28,7 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
         ]);
 
-        return response()->json([
-            'user' => $user,
-            'token' => $user->createToken('api')->plainTextToken,
-        ], 201);
+        return response()->json(Customers::signedIn($user), 201);
     }
 
     public function login(Request $request): JsonResponse
@@ -45,13 +44,8 @@ class AuthController extends Controller
             return response()->json(['message' => __('Invalid credentials.')], 401);
         }
 
-        // Custom session values (e.g. sessionemployeeid) are worked out once per login.
-        SessionValues::refresh($user);
-
-        return response()->json([
-            'user' => $user,
-            'token' => $user->createToken('api')->plainTextToken,
-        ]);
+        // Custom session values (e.g. sessionemployeeid) are worked out once per login, in the customer.
+        return response()->json(Customers::signedIn($user));
     }
 
     public function logout(Request $request): JsonResponse

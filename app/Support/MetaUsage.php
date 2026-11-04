@@ -93,7 +93,7 @@ class MetaUsage
         foreach (DB::table('widgets')->whereNotNull('template_meta_id')->get(['name', 'template_meta_id']) as $widget) {
             $add($widget->template_meta_id, null, "Widget library “{$widget->name}”");
         }
-        foreach (DB::table('users')->whereNotNull('theme_meta_id')->groupBy('theme_meta_id')->selectRaw('theme_meta_id, COUNT(*) AS people')->get() as $pick) {
+        foreach (DB::connection('main')->table('customer_users')->where('customer_id', CustomerSchema::current()?->id)->whereNotNull('theme_meta_id')->groupBy('theme_meta_id')->selectRaw('theme_meta_id, COUNT(*) AS people')->get() as $pick) {
             $add($pick->theme_meta_id, null, (int) $pick->people === 1 ? 'Theme of 1 user' : "Theme of {$pick->people} users");
         }
 

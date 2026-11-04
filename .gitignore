@@ -27,3 +27,4 @@ Homestead.yaml
 Thumbs.db
 /docker/droplet/.env
 /docker/droplet/aiven-ca.pem
+.superpowers/

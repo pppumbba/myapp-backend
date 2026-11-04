@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Support\Customers;
+use App\Support\CustomerSchema;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -15,7 +18,11 @@ class ProfileController extends Controller
     /** GET /user */
     public function show(Request $request): JsonResponse
     {
-        return response()->json($request->user());
+        // The customer this login works in (null: none picked yet) and all the person's customers.
+        return response()->json($request->user()->toArray() + [
+            'customer' => CustomerSchema::current()?->only(['id', 'code', 'name']),
+            'customers' => Customers::listFor($request->user()),
+        ]);
     }
 
     /** PUT /user */
@@ -24,7 +31,7 @@ class ProfileController extends Controller
         $user = $request->user();
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'email' => ['required', 'email', 'max:255', Rule::unique(User::class, 'email')->ignore($user->id)],
         ]);
 
         $user->update($data);

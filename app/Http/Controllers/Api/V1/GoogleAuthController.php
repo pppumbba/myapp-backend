@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\User;
-use App\Support\SessionValues;
+use App\Support\Customers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,12 +100,7 @@ class GoogleAuthController extends Controller
             return response()->json(['message' => __('The Google sign-in expired. Try again.')], 401);
         }
 
-        SessionValues::refresh($user);
-
-        return response()->json([
-            'user' => $user,
-            'token' => $user->createToken('api')->plainTextToken,
-        ]);
+        return response()->json(Customers::signedIn($user));
     }
 
     /** Whether the client id and secret are set. */

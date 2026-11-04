@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Language;
+use App\Models\User;
 use App\Support\Access;
 use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
@@ -74,7 +75,7 @@ class LanguageController extends Controller
         $metaIds = DB::table('translations')->where('locale', $language->code)->distinct()->pluck('meta_id');
         DB::transaction(function () use ($language) {
             DB::table('translations')->where('locale', $language->code)->delete();
-            DB::table('users')->where('locale', $language->code)->update(['locale' => null]);
+            User::inCurrentCustomer()->where('locale', $language->code)->update(['locale' => null]);
             $language->delete();
         });
         $metaIds->each(fn ($id) => Translations::forget($id));

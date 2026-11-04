@@ -240,11 +240,11 @@ class Notifier
         foreach (MetaParam::where('main_meta_id', $rule->id)->where('is_show', true)->orderBy('order_number')->get() as $p) {
             $value = trim((string) $p->field_path);
             $ids = $ids->merge(match ($p->data_type) {
-                'role' => User::whereHas('roles', fn ($q) => $q->where('code', $value))->pluck('id'),
+                'role' => User::withRole(fn ($q) => $q->where('code', $value))->pluck('id'),
                 'user' => User::where('email', $value)->pluck('id'),
                 'field' => self::usersIn($record?->{$value} ?? null),
                 'actor' => $actor ? [$actor->id] : [],
-                'everyone' => User::pluck('id'),
+                'everyone' => User::inCurrentCustomer()->pluck('id'),
                 default => [],
             });
         }
@@ -253,7 +253,7 @@ class Notifier
         if (($config['exclude_actor'] ?? true) && $actor) {
             $ids = $ids->reject(fn ($id) => (int) $id === $actor->id);
         }
-        $users = User::whereIn('id', $ids->unique()->values())->orderBy('name')->get();
+        $users = User::inCurrentCustomer()->whereIn('id', $ids->unique()->values())->orderBy('name')->get();
 
         // Only people who may open what it is about.
         $source = (int) ($config['source_meta_id'] ?? 0);

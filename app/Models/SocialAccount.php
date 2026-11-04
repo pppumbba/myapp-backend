@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\OnMainSchema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class SocialAccount extends Model
 {
+    use OnMainSchema;
+
     protected $fillable = ['user_id', 'provider', 'provider_id', 'email'];
 
     public function user(): BelongsTo

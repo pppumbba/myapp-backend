@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\OnCustomerSchema;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** Someone who acts for a company: any member browses; bid, sign and manage are rights. */
 class CompanyMember extends Model
 {
+    use OnCustomerSchema;
+
     protected $fillable = ['company_id', 'user_id', 'can_bid', 'can_sign', 'can_manage'];
 
     public function company(): BelongsTo

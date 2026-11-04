@@ -2,14 +2,48 @@
 
 namespace Tests;
 
+use App\Models\Customer;
 use App\Models\MetaPermission;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\CustomerSchema;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Str;
 
 abstract class TestCase extends BaseTestCase
 {
+    /** The customer every test works in, unless it switches. */
+    protected ?Customer $testCustomer = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        if (in_array(RefreshDatabase::class, class_uses_recursive($this), true)) {
+            $this->testCustomer = Customer::create(['code' => 'test', 'name' => 'Test', 'schema_name' => 'test']);
+            CustomerSchema::use($this->testCustomer);
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        CustomerSchema::forget();
+
+        parent::tearDown();
+    }
+
+    /** On SQLite (tests) the main and customer connections are one in-memory database: "main" is the same connection. */
+    public function createApplication()
+    {
+        $app = parent::createApplication();
+        if (config('database.connections.customer.driver') === 'sqlite') {
+            $app['db']->extend('main', fn () => $app['db']->connection('customer'));
+        }
+
+        return $app;
+    }
+
     /**
      * Gives the user a new role that may do these things with these metas: a meta with no
      * permission rows is for admins only.

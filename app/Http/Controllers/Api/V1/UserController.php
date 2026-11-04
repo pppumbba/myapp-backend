@@ -19,7 +19,7 @@ class UserController extends Controller
         Access::requireAdmin($request->user());
         $search = trim((string) $request->query('search', ''));
 
-        return response()->json(User::with('roles:id,code,name')
+        return response()->json(User::inCurrentCustomer()->with('roles:id,code,name')
             ->when($search !== '', fn ($q) => $q->where(fn ($q) => $q->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%")))
             ->orderBy('name')
             ->paginate(50, ['id', 'name', 'email', 'created_at']));

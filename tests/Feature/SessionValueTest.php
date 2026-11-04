@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\CustomerUser;
 use App\Models\Meta;
 use App\Models\MetaParam;
 use App\Models\MetaType;
@@ -27,6 +28,8 @@ class SessionValueTest extends TestCase
         parent::setUp();
         $this->seed(ProcurementDemoSeeder::class);
         $this->admin = User::factory()->admin()->create(['email' => 'admin@example.com']);
+        // Signing in works the values out in the person's customer.
+        CustomerUser::firstOrCreate(['customer_id' => $this->testCustomer->id, 'user_id' => $this->admin->id]);
 
         Schema::create('test_employees', function (Blueprint $table) {
             $table->id();
