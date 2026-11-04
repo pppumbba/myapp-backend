@@ -3,7 +3,7 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
-return [
+$config = [
 
     /*
     |--------------------------------------------------------------------------
@@ -17,7 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => 'customer',
 
     /*
     |--------------------------------------------------------------------------
@@ -182,3 +182,14 @@ return [
     ],
 
 ];
+
+/*
+ * Two connections over the driver picked by DB_CONNECTION: "main" holds users, logins and the
+ * customer list; "customer" is the schema of the customer a request works in, switched per
+ * request by App\Support\CustomerSchema. DB_MAIN_DATABASE falls back to DB_DATABASE.
+ */
+$base = $config['connections'][env('DB_CONNECTION', 'sqlite')];
+$config['connections']['customer'] = $base;
+$config['connections']['main'] = ['database' => env('DB_MAIN_DATABASE', $base['database'])] + $base;
+
+return $config;

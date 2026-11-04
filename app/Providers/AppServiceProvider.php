@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\PersonalAccessToken;
 use App\Support\Market\Dan\DanDriver;
 use App\Support\Market\Dan\FakeDanDriver;
 use App\Support\Market\Khur\FakeKhurDriver;
@@ -14,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
 use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
@@ -52,6 +54,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Tokens live in the main schema and carry the customer they work in.
+        Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
+        // Tests run main and customer tables in one database; elsewhere main migrations run on their own
+        // (migrate --database=main --path=database/migrations/main).
+        if ($this->app->runningUnitTests()) {
+            $this->loadMigrationsFrom(database_path('migrations/main'));
+        }
+
         // Guests on public metas (a portal): reads and sends per address; signed-in users are not limited.
         // The token is read here (sanctum guard): this can run before auth.optional picks that guard,
         // and then every signed-in user would share their IP's guest limit.
