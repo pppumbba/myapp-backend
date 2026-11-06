@@ -45,14 +45,14 @@ Artisan::command('forms:run-scheduled {code? : Run this schedule now, due or not
     return 0;
 })->purpose('Run the scheduled forms that are due');
 
-Schedule::command('customers:each forms:run-scheduled')->everyMinute()->withoutOverlapping();
+Schedule::command('customers:each forms:run-scheduled')->everyMinute()->withoutOverlapping()->onOneServer();
 
 /** Deletes uploads that no record holds, a day after they came: forms closed without saving. */
 Artisan::command('contents:prune', function () {
     $this->info(Contents::pruneStale().' unattached files deleted.');
 })->purpose('Delete uploads never saved to a record');
 
-Schedule::command('customers:each contents:prune')->daily();
+Schedule::command('customers:each contents:prune')->daily()->onOneServer();
 
 /** Reads market companies from ХУР again: a liquidated one is frozen. Each is looked at weekly. */
 Artisan::command('market:recheck-companies', function () {
@@ -61,21 +61,21 @@ Artisan::command('market:recheck-companies', function () {
     $this->line("{$due->count()} companies checked, {$changed} changed.");
 })->purpose('Check market companies against ХУР again');
 
-Schedule::command('customers:each market:recheck-companies --only='.config('customers.first_code'))->daily();
+Schedule::command('customers:each market:recheck-companies --only='.config('customers.first_code'))->daily()->onOneServer();
 
 /** Pays out escrow steps the vendor asked for and the buyer left unanswered; frozen ones wait. */
 Artisan::command('market:release-due', function () {
     $this->line(Escrow::autoRelease().' payment steps released.');
 })->purpose('Release requested escrow steps whose wait is over');
 
-Schedule::command('customers:each market:release-due --only='.config('customers.first_code'))->hourly();
+Schedule::command('customers:each market:release-due --only='.config('customers.first_code'))->hourly()->onOneServer();
 
 /** Closes tenders past their close date and ends final-offer rounds past theirs. */
 Artisan::command('market:close-tenders', function () {
     $this->line(Tenders::closeDue().' tenders moved.');
 })->purpose('Close tenders and final rounds whose time is up');
 
-Schedule::command('customers:each market:close-tenders --only='.config('customers.first_code'))->everyMinute()->withoutOverlapping();
+Schedule::command('customers:each market:close-tenders --only='.config('customers.first_code'))->everyMinute()->withoutOverlapping()->onOneServer();
 
 /** Writes database/schema/customer-core.sql from this schema: what every new customer schema starts from. */
 Artisan::command('customers:dump-core', function () {

@@ -25,4 +25,4 @@ if [ ! -d /opt/myapp-backend ]; then
     git clone https://github.com/pppumbba/myapp-backend.git /opt/myapp-backend
 fi
 
-echo "Done. Next: put .env.production, aiven-ca.pem and .env (DOMAIN=...) in /opt/myapp-backend/docker/server"
+echo "Done. Next, in /opt/myapp-backend/docker/server: .env.production (from .env.production.example), aiven-ca.pem, and .env with DOMAIN=..."
