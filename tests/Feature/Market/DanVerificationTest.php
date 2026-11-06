@@ -14,15 +14,15 @@ class DanVerificationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['app.frontend_url' => 'http://front.test', 'market.dan.driver' => 'fake']);
+        config(['app.frontend_url' => 'http://front.test']);
     }
 
-    /** Starts DAN as this user and returns the state the fake page was sent. */
+    /** Starts DAN as this user and returns the state DAN was sent. */
     private function start(User $user): string
     {
         Sanctum::actingAs($user);
         $url = $this->postJson('/api/market/dan/start')->assertOk()->json('url');
-        $this->assertStringContainsString('/auth/dan/fake?state=', $url);
+        $this->assertStringStartsWith('https://dan.test/authorize?state=', $url);
         parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
         return $query['state'];
@@ -35,7 +35,7 @@ class DanVerificationTest extends TestCase
      */
     private function comeBack(string $state, string $registryNumber): array
     {
-        $back = $this->get('/auth/dan/callback?'.http_build_query(['state' => $state, 'code' => 'fake-'.$registryNumber]))
+        $back = $this->get('/auth/dan/callback?'.http_build_query(['state' => $state, 'code' => 'test-'.$registryNumber]))
             ->assertRedirect()->headers->get('Location');
         $this->assertStringStartsWith('http://front.test/market/account?', $back);
         parse_str((string) parse_url($back, PHP_URL_QUERY), $query);
@@ -43,12 +43,11 @@ class DanVerificationTest extends TestCase
         return $query;
     }
 
-    public function test_a_user_verifies_through_the_fake_dan_and_is_marked_verified(): void
+    public function test_a_user_verifies_through_dan_and_is_marked_verified(): void
     {
         $user = User::factory()->create();
         $state = $this->start($user);
 
-        $this->get('/auth/dan/fake?state='.$state)->assertOk()->assertSee('УБ90010112')->assertSee(http_build_query(['code' => 'fake-УБ90010112']), false);
         $this->assertSame(['dan' => 'ok'], $this->comeBack($state, 'УБ90010112'));
 
         $user->refresh();
@@ -81,12 +80,5 @@ class DanVerificationTest extends TestCase
         $this->assertArrayHasKey('dan_error', $this->comeBack($state, 'УБ85051523'));
         $this->assertArrayHasKey('dan_error', $this->comeBack('made-up', 'УБ85051523'));
         $this->assertFalse($user->fresh()->isVerified());
-    }
-
-    public function test_the_fake_page_is_missing_in_production(): void
-    {
-        $this->app['env'] = 'production';
-
-        $this->get('/auth/dan/fake?state=x')->assertNotFound();
     }
 }

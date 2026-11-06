@@ -31,9 +31,16 @@ class Chat extends Model
         return min($a, $b).':'.max($a, $b);
     }
 
+    /**
+     * The chat's people. User lives on the main schema, but chat_members is in the customer's, so
+     * the relation is read on the chat's own connection, through that schema's users view.
+     */
     public function members(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'chat_members')->withPivot(['last_read_message_id', 'typing_at'])->withTimestamps();
+        $users = (new User)->setConnection($this->getConnectionName());
+
+        return (new BelongsToMany($users->newQuery(), $this, 'chat_members', 'chat_id', 'user_id', 'id', 'id', 'members'))
+            ->withPivot(['last_read_message_id', 'typing_at'])->withTimestamps();
     }
 
     public function messages(): HasMany
@@ -47,9 +54,9 @@ class Chat extends Model
     }
 
     /** Adds a message (system ones say who joined, left or renamed) and moves the chat to the top. */
-    public function post(?User $user, string $body, string $kind = 'text'): ChatMessage
+    public function post(?User $user, string $body, string $kind = 'text', ?array $data = null): ChatMessage
     {
-        $message = $this->messages()->create(['user_id' => $user?->id, 'body' => $body, 'kind' => $kind]);
+        $message = $this->messages()->create(['user_id' => $user?->id, 'body' => $body, 'kind' => $kind, 'data' => $data]);
         $this->forceFill(['last_message_at' => $message->created_at])->save();
         if ($user) {
             // Writing a message means having read the chat up to it, and no longer typing.

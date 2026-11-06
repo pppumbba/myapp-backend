@@ -33,6 +33,7 @@ CREATE TABLE `chat_messages` (
   `user_id` bigint(20) unsigned DEFAULT NULL,
   `kind` varchar(10) NOT NULL DEFAULT 'text',
   `body` text NOT NULL,
+  `data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`data`)),
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -257,6 +258,8 @@ CREATE TABLE `meta_process_workflow` (
   `main_process_id` bigint(20) unsigned NOT NULL,
   `process_id` bigint(20) unsigned NOT NULL,
   `order_number` int(11) NOT NULL DEFAULT 0,
+  `pos_x` int(11) DEFAULT NULL,
+  `pos_y` int(11) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -280,6 +283,21 @@ CREATE TABLE `meta_schedules` (
   CONSTRAINT `meta_schedules_process_id_foreign` FOREIGN KEY (`process_id`) REFERENCES `metas` (`id`) ON DELETE CASCADE,
   CONSTRAINT `meta_schedules_schedule_id_foreign` FOREIGN KEY (`schedule_id`) REFERENCES `schedules` (`id`) ON DELETE CASCADE,
   CONSTRAINT `meta_schedules_view_id_foreign` FOREIGN KEY (`view_id`) REFERENCES `metas` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+-- @@
+CREATE TABLE `meta_structures` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `meta_id` bigint(20) unsigned NOT NULL,
+  `table_name` varchar(255) NOT NULL,
+  `columns` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`columns`)),
+  `applied_at` timestamp NULL DEFAULT NULL,
+  `applied_by` bigint(20) unsigned DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `meta_structures_meta_id_unique` (`meta_id`),
+  UNIQUE KEY `meta_structures_table_name_unique` (`table_name`),
+  CONSTRAINT `meta_structures_meta_id_foreign` FOREIGN KEY (`meta_id`) REFERENCES `metas` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 -- @@
 CREATE TABLE `meta_tag_map` (
@@ -737,6 +755,8 @@ INSERT INTO `meta_types` (`id`, `code`, `name`, `is_active`, `description`) VALU
 -- @@
 INSERT INTO `meta_types` (`id`, `code`, `name`, `is_active`, `description`) VALUES ('624', 'screen', 'Screen', '1', 'A built-in screen of the system, such as market contracts, placed in an app’s menu like any other meta.')
 -- @@
+INSERT INTO `meta_types` (`id`, `code`, `name`, `is_active`, `description`) VALUES ('673', 'structure', 'Structure', '1', 'A database table: its params are the columns. Apply to database creates the table, then adds and changes columns.')
+-- @@
 INSERT INTO `languages` (`id`, `code`, `name`, `is_source`, `is_default`, `is_active`, `order_number`, `created_at`, `updated_at`) VALUES ('1', 'en', 'English', '1', '1', '1', '1', '2026-10-25 16:26:50', '2026-10-27 07:15:05')
 -- @@
 INSERT INTO `widgets` (`id`, `code`, `name`, `category`, `renderer`, `template_meta_id`, `icon`, `description`, `props`, `is_active`, `order_number`, `created_at`, `updated_at`) VALUES ('1', 'section', 'Section', 'Layout', 'section', NULL, 'layout', 'A box that holds other widgets, with an optional title and background.', '[{\"key\":\"title\",\"label\":\"Title\",\"type\":\"text\"},{\"key\":\"subtitle\",\"label\":\"Subtitle\",\"type\":\"text\"},{\"key\":\"background\",\"label\":\"Background\",\"type\":\"select\",\"options\":[\"none\",\"card\",\"subtle\",\"brand\"],\"default\":\"card\"}]', '1', '1', '2026-10-20 15:19:18', '2026-10-20 15:19:18')
@@ -984,5 +1004,11 @@ INSERT INTO `migrations` (`migration`, `batch`) VALUES ('2026_12_03_000032_creat
 INSERT INTO `migrations` (`migration`, `batch`) VALUES ('2026_12_03_000033_add_data_tables_to_patches_table', 1)
 -- @@
 INSERT INTO `migrations` (`migration`, `batch`) VALUES ('2026_12_04_000002_drop_foreign_keys_to_users', 1)
+-- @@
+INSERT INTO `migrations` (`migration`, `batch`) VALUES ('2026_12_04_000003_add_data_to_chat_messages_table', 1)
+-- @@
+INSERT INTO `migrations` (`migration`, `batch`) VALUES ('2026_12_04_000004_add_position_to_meta_process_workflow_table', 1)
+-- @@
+INSERT INTO `migrations` (`migration`, `batch`) VALUES ('2026_12_04_000005_create_structure_meta_type', 1)
 -- @@
 SET FOREIGN_KEY_CHECKS = 1

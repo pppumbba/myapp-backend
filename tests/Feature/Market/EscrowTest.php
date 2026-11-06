@@ -122,12 +122,12 @@ class EscrowTest extends TestCase
         return $this->postJson("/api/market/contract-steps/{$step->id}/{$action}", $body)->assertStatus($status)->json() ?? [];
     }
 
-    /** The buyer funds the step and pays the escrow invoice on the fake provider. */
+    /** The buyer funds the step and pays the escrow invoice on the test provider. */
     private function fund(User $buyer, ContractStep $step): void
     {
         $payment = $this->stepAction($buyer, $step, 'fund', [], 201);
         $this->assertSame(870000, (int) $payment['amount']);
-        $this->get("/market/pay/fake/{$payment['id']}/pay");
+        $this->payInvoice($payment['id']);
         $this->assertSame('funded', $step->fresh()->status);
     }
 

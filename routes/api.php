@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\V1\MetaController;
 use App\Http\Controllers\Api\V1\MetaCopyController;
 use App\Http\Controllers\Api\V1\MetaDataController;
 use App\Http\Controllers\Api\V1\MetaParamController;
+use App\Http\Controllers\Api\V1\MetaStructureController;
 use App\Http\Controllers\Api\V1\MetaTransferController;
 use App\Http\Controllers\Api\V1\MetaTypeController;
 use App\Http\Controllers\Api\V1\MetaUsageController;
@@ -319,6 +320,8 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     Route::get('/patch-installs/{install}/download', [PatchController::class, 'downloadInstall']);
 
     Route::post('/excel-structure', [ExcelStructureController::class, 'upload']);
+    Route::get('/metas/{meta}/structure', [MetaStructureController::class, 'show']);
+    Route::post('/metas/{meta}/structure/apply', [MetaStructureController::class, 'apply']);
     Route::get('/excel-structure/{token}', [ExcelStructureController::class, 'show']);
     Route::post('/excel-structure/{token}/columns', [ExcelStructureController::class, 'columns']);
     Route::post('/excel-structure/{token}/create', [ExcelStructureController::class, 'create']);
@@ -345,6 +348,7 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
 
     // Process flows: the forms a form's new record runs next, and the values they take.
     Route::get('/metas/{meta}/process-flow', [ProcessFlowController::class, 'show']);
+    Route::get('/metas/{meta}/process-flow/ports', [ProcessFlowController::class, 'ports']);
     Route::put('/metas/{meta}/process-flow', [ProcessFlowController::class, 'save'])->middleware('meta.version');
 
     // Websites: pages from the page builder with addresses, domains, checks, publishing and visits (Sites).

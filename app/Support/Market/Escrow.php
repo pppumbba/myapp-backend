@@ -21,11 +21,14 @@ class Escrow
     /** Statuses in which the vendor is working and money can be held. */
     public const RUNNING = ['active', 'in_progress', 'delivered'];
 
-    /** Held money is test money: payouts only move the ledger, so real payments may not come in. */
+    /**
+     * Held money is test money: payouts only move the ledger, so real payments may not come in.
+     * Only the tests' stand-in payment driver takes test money, so escrow stays closed in the app.
+     */
     public static function requireAvailable(): void
     {
         abort_unless(
-            config('market.escrow.mode') === 'test' && config('market.payments.driver') === 'fake',
+            config('market.escrow.mode') === 'test' && config('market.payments.driver') === 'test',
             422,
             __('The market cannot hold money until a licensed partner is in place.'),
         );

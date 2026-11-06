@@ -7,9 +7,7 @@ use App\Models\CompanyMember;
 use App\Models\RepresentationRequest;
 use App\Support\Market\Companies;
 use App\Support\Market\Contracts;
-use App\Support\Market\Dan\FakeDanDriver;
 use App\Support\Market\Verification;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,8 +15,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Verifying people through DAN: start (API), the callback the browser comes back to (web),
- * the fake DAN page used until the real one is connected, and what the market knows about
- * the signed-in user.
+ * and what the market knows about the signed-in user.
  */
 class DanController extends Controller
 {
@@ -58,14 +55,6 @@ class DanController extends Controller
         }
 
         return $this->toFrontend('/market/account', ['dan' => 'ok']);
-    }
-
-    /** GET /auth/dan/fake — the test people to sign in as; never in production. */
-    public function fake(Request $request): View
-    {
-        abort_if(app()->isProduction() || config('market.dan.driver') !== 'fake', 404);
-
-        return view('market.dan-fake', ['state' => (string) $request->query('state'), 'citizens' => FakeDanDriver::citizens()]);
     }
 
     /** GET /api/market/me — the user's verification, companies and representation requests. */

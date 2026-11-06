@@ -37,7 +37,7 @@ class ContractSigningTest extends TestCase
     /** Back from DAN as this person. */
     private function backFromDan(string $state, string $registryNumber): TestResponse
     {
-        return $this->get('/auth/dan/callback?'.http_build_query(['state' => $state, 'code' => "fake-{$registryNumber}"]));
+        return $this->get('/auth/dan/callback?'.http_build_query(['state' => $state, 'code' => "test-{$registryNumber}"]));
     }
 
     public function test_both_sides_sign_with_dan_then_the_buyer_pays_the_fees_and_it_is_in_force(): void
@@ -62,7 +62,7 @@ class ContractSigningTest extends TestCase
             ->json('payment');
         $this->get("/api/market/contracts/{$contract->id}/pdf")->assertOk()->assertHeader('Content-Type', 'application/pdf');
 
-        $this->get("/market/pay/fake/{$payment['id']}/pay");
+        $this->payInvoice($payment['id']);
 
         $this->assertSame('active', $contract->fresh()->status);
         $this->assertSame([['kind' => 'contract', 'amount' => 29000], ['kind' => 'middleman', 'amount' => 58000]], Payment::find($payment['id'])->lines);

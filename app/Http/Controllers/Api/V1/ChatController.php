@@ -141,12 +141,35 @@ class ChatController extends Controller
         return response()->json(['left' => true]);
     }
 
-    /** POST /chats/{chat}/messages {body} */
+    /**
+     * POST /chats/{chat}/messages {body, record?} — record: a grid row shared as a card,
+     * {meta_id, record_id, title, fields: [{label, value}]}; the body is then an optional note.
+     */
     public function send(Request $request, Chat $chat): JsonResponse
     {
         $user = $this->member($request, $chat);
-        $data = $request->validate(['body' => ['required', 'string', 'max:5000']]);
-        $body = trim($data['body']);
+        $data = $request->validate([
+            'body' => [Rule::requiredIf(! $request->has('record')), 'nullable', 'string', 'max:5000'],
+            'record' => ['sometimes', 'array'],
+            'record.meta_id' => ['required_with:record', 'integer', Rule::exists('metas', 'id')],
+            'record.record_id' => ['required_with:record', 'string', 'max:100'],
+            'record.title' => ['required_with:record', 'string', 'max:200'],
+            'record.fields' => ['nullable', 'array', 'max:8'],
+            'record.fields.*.label' => ['required', 'string', 'max:100'],
+            'record.fields.*.value' => ['nullable', 'string', 'max:500'],
+        ]);
+        $body = trim((string) ($data['body'] ?? ''));
+        if (isset($data['record'])) {
+            $record = $data['record'];
+            $card = [
+                'meta_id' => (int) $record['meta_id'],
+                'record_id' => $record['record_id'],
+                'title' => trim($record['title']),
+                'fields' => collect($record['fields'] ?? [])->map(fn (array $f) => ['label' => $f['label'], 'value' => (string) ($f['value'] ?? '')])->values()->all(),
+            ];
+
+            return response()->json($this->message($chat->post($user, $body, 'record', $card)->setRelation('user', $user)), 201);
+        }
         abort_if($body === '', 422, __('The message is empty.'));
 
         return response()->json($this->message($chat->post($user, $body)->setRelation('user', $user)), 201);
@@ -190,9 +213,9 @@ class ChatController extends Controller
         if (mb_strlen($q) < 2) {
             return response()->json([]);
         }
-        $rows = ChatMessage::query()->with('user:id,name')->where('kind', 'text')
+        $rows = ChatMessage::query()->with('user:id,name')->whereIn('kind', ['text', 'record'])
             ->whereIn('chat_id', DB::table('chat_members')->where('user_id', $request->user()->id)->select('chat_id'))
-            ->where('body', 'like', '%'.addcslashes($q, '%_\\').'%')
+            ->where(fn ($w) => $w->where('body', 'like', $like = '%'.addcslashes($q, '%_\\').'%')->orWhere('data', 'like', $like))
             ->orderByDesc('id')->limit(30)->get();
 
         return response()->json($rows->map(fn (ChatMessage $m) => $this->message($m)));
@@ -207,7 +230,7 @@ class ChatController extends Controller
         return $user;
     }
 
-    /** @return array{id: int, chat_id: int, user_id: ?int, user_name: ?string, kind: string, body: string, created_at: string} */
+    /** @return array{id: int, chat_id: int, user_id: ?int, user_name: ?string, kind: string, body: string, data: ?array, created_at: string} */
     private function message(ChatMessage $m): array
     {
         return [
@@ -217,6 +240,7 @@ class ChatController extends Controller
             'user_name' => $m->user?->name,
             'kind' => $m->kind,
             'body' => $m->body,
+            'data' => $m->data,
             'created_at' => $m->created_at?->toIso8601String(),
         ];
     }

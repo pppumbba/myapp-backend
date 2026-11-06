@@ -3,18 +3,18 @@
 return [
 
     /*
-    | Where people and companies are checked. "fake" answers from the test lists below;
-    | the real DAN and ХУР connections come once the government access agreement exists.
+    | Where people and companies are checked. No DAN driver exists yet; "fake" ХУР answers from
+    | the test companies below. The real connections come once the government access agreement exists.
     */
-    'dan' => ['driver' => env('MARKET_DAN_DRIVER', 'fake')],
+    'dan' => ['driver' => env('MARKET_DAN_DRIVER')],
     'khur' => ['driver' => env('MARKET_KHUR_DRIVER', 'fake')],
 
     /*
-    | Where fees and escrow money are paid. "fake" shows a test pay page; "qpay" sends real
-    | invoices once the merchant account exists (QPAY_* in .env).
+    | Where fees and escrow money are paid. "qpay" sends real invoices once the merchant
+    | account exists (QPAY_* in .env).
     */
     'payments' => [
-        'driver' => env('MARKET_PAYMENT_DRIVER', 'fake'),
+        'driver' => env('MARKET_PAYMENT_DRIVER', 'qpay'),
         'qpay' => [
             'url' => env('QPAY_URL', 'https://merchant.qpay.mn'),
             'client_id' => env('QPAY_CLIENT_ID'),
@@ -43,13 +43,8 @@ return [
         'final_round_days' => (int) env('MARKET_TENDER_FINAL_ROUND_DAYS', 3),
     ],
 
-    // Test people and companies the fake drivers answer with.
+    // Test companies the fake ХУР driver answers with.
     'fake' => [
-        'citizens' => [
-            ['registry_number' => 'УБ90010112', 'name' => 'Бат-Эрдэнэ Ганбаатар'],
-            ['registry_number' => 'УБ85051523', 'name' => 'Сарангэрэл Должин'],
-            ['registry_number' => 'ДА92120334', 'name' => 'Тэмүүлэн Болд'],
-        ],
         'companies' => [
             ['registry_number' => '5123456', 'name' => 'Говь Ханган ХХК', 'status' => 'active', 'director_registry_number' => 'УБ90010112', 'director_name' => 'Бат-Эрдэнэ Ганбаатар'],
             ['registry_number' => '6234567', 'name' => 'Талст Үйлчилгээ ХХК', 'status' => 'active', 'director_registry_number' => 'УБ85051523', 'director_name' => 'Сарангэрэл Должин'],

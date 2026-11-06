@@ -1,6 +1,6 @@
-# The API on a DigitalOcean droplet: the same image as Render, behind Caddy for HTTPS.
+# The API on our own server (Hetzner Cloud): the same image as Render, behind Caddy for HTTPS.
 # Uploads and PDFs live in the app-storage volume, so they survive restarts and deploys.
-# Run from docker/droplet: docker compose up -d --build
+# Run from docker/server: docker compose up -d --build
 services:
   app:
     build: ../..

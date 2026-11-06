@@ -37,6 +37,7 @@ class MetaTypeSeeder extends Seeder
             ['code' => 'matrix', 'name' => 'Matrix', 'description' => 'A value for each pair of records from two grids, such as each bidder’s price for each item.'],
             ['code' => 'website', 'name' => 'Website', 'description' => 'A public website: pages from the page builder with addresses, a menu, its own domains, publishing and visit counts.'],
             ['code' => 'screen', 'name' => 'Screen', 'description' => 'A built-in screen of the system, such as market contracts, placed in an app’s menu like any other meta.'],
+            ['code' => 'structure', 'name' => 'Structure', 'description' => 'A database table: its params are the columns. Apply to database creates the table, then adds and changes columns.'],
         ];
 
         // meta_types has no timestamps, so upsert through the query builder. Safe to run again.

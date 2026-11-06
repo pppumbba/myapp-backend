@@ -110,6 +110,61 @@ class ProcessFlowTest extends TestCase
         $this->assertSame($items, DB::table('proc_items')->count());
     }
 
+    public function test_a_get_step_reads_a_record_and_later_steps_take_values_from_any_earlier_step(): void
+    {
+        $get = Meta::where('code', 'proc_order_get')->value('id');
+        $this->putJson("/api/metas/{$this->requestForm}/process-flow", [
+            'main_at' => ['x' => 20, 'y' => 40],
+            'steps' => [
+                ['key' => 'order', 'process_id' => $this->orderForm, 'x' => 300, 'y' => 40, 'behaviours' => [
+                    ['source_path' => "={$this->supplier}", 'target_path' => 'supplier_id'],
+                    ['source_path' => 'main.needed_by', 'target_path' => 'order_date'],
+                    ['source_path' => 'main.title', 'target_path' => 'notes'],
+                ]],
+                ['key' => 'load', 'process_id' => $get, 'behaviours' => [['source_path' => 'step:order.id', 'target_path' => 'id']]],
+                ['key' => 'item', 'process_id' => $this->itemForm, 'behaviours' => [
+                    ['source_path' => 'step:load.po_number', 'target_path' => 'code'],
+                    ['source_path' => 'step:order.notes', 'target_path' => 'name'],
+                    ['source_path' => '=0', 'target_path' => 'unit_price'],
+                ]],
+            ],
+            'transitions' => [['source' => 'order', 'target' => 'load'], ['source' => 'load', 'target' => 'item']],
+        ])->assertOk()
+            ->assertJsonPath('main_at', ['x' => 20, 'y' => 40])
+            ->assertJsonPath('steps.0.pos_x', 300)
+            ->assertJsonPath('steps.1.process.type.code', 'get')
+            ->assertJsonPath('steps.2.behaviours.0.source_path', 'step1.po_number');
+
+        $response = $this->request('Desks')->assertCreated()->assertJsonCount(3, '_processes');
+
+        $item = DB::table('proc_items')->find($response->json('_processes.2.id'));
+        $this->assertSame('PO-261021001', $item->code);
+        $this->assertSame('Desks', $item->name);
+    }
+
+    public function test_ports_list_what_each_meta_takes_in_and_passes_on(): void
+    {
+        $get = Meta::where('code', 'proc_order_get')->value('id');
+
+        $ports = $this->getJson("/api/metas/{$this->requestForm}/process-flow/ports?ids={$this->orderForm},{$get}")->assertOk()->json();
+
+        $fields = fn (array $list) => array_column($list, 'field');
+        $this->assertContains('title', $fields($ports[$this->requestForm]['outputs']));
+        $this->assertContains('id', $fields($ports[$this->orderForm]['outputs']));
+        $this->assertNotContains('id', $fields($ports[$this->orderForm]['inputs']));
+        $this->assertContains('supplier_id', $fields($ports[$this->orderForm]['inputs']));
+        $this->assertSame(['id'], $fields($ports[$get]['inputs']));
+        $this->assertContains('po_number', $fields($ports[$get]['outputs']));
+    }
+
+    public function test_the_builder_refuses_a_value_from_a_step_not_in_the_flow(): void
+    {
+        $this->putJson("/api/metas/{$this->requestForm}/process-flow", [
+            'steps' => [['key' => 'a', 'process_id' => $this->orderForm, 'behaviours' => [['source_path' => 'step:ghost.id', 'target_path' => 'notes']]]],
+            'transitions' => [],
+        ])->assertUnprocessable();
+    }
+
     public function test_the_builder_refuses_a_form_running_itself_or_a_loose_transition(): void
     {
         $this->putJson("/api/metas/{$this->requestForm}/process-flow", [

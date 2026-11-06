@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Chat;
+use App\Models\Meta;
+use App\Models\MetaType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -92,5 +94,24 @@ class ChatTest extends TestCase
         User::factory()->create(['name' => 'Carl']);
 
         $this->as($me)->getJson('/api/chats/people?q=ann')->assertOk()->assertJsonCount(1)->assertJsonPath('0.name', 'Anna Beta');
+    }
+
+    public function test_a_grid_row_is_shared_as_a_record_card(): void
+    {
+        [$ann, $bob] = User::factory()->count(2)->create();
+        $grid = Meta::create(['code' => 'orders_grid', 'name' => 'Orders', 'type_id' => MetaType::where('code', 'datagrid')->value('id'), 'table_name' => 'users']);
+        $chatId = $this->as($ann)->postJson('/api/chats/direct', ['user_id' => $bob->id])->json('id');
+
+        $record = ['meta_id' => $grid->id, 'record_id' => '42', 'title' => 'PO-0042', 'fields' => [['label' => 'Supplier', 'value' => 'Acme'], ['label' => 'Total', 'value' => null]]];
+        $this->as($ann)->postJson("/api/chats/{$chatId}/messages", ['record' => $record])->assertCreated()
+            ->assertJsonPath('kind', 'record')->assertJsonPath('body', '')
+            ->assertJsonPath('data.title', 'PO-0042')->assertJsonPath('data.fields.1.value', '');
+        $this->as($ann)->postJson("/api/chats/{$chatId}/messages", ['body' => 'Look at this', 'record' => $record])->assertCreated()->assertJsonPath('body', 'Look at this');
+
+        $this->as($bob)->getJson("/api/chats/poll?open={$chatId}")->assertJsonPath('open.messages.0.data.meta_id', $grid->id)->assertJsonPath('unread', 2);
+        $this->as($bob)->getJson('/api/chats/search?q=PO-00')->assertJsonCount(2);
+
+        $this->as($ann)->postJson("/api/chats/{$chatId}/messages", ['record' => ['meta_id' => 999999, 'record_id' => '1', 'title' => 'x']])->assertUnprocessable();
+        $this->as($ann)->postJson("/api/chats/{$chatId}/messages", [])->assertUnprocessable();
     }
 }

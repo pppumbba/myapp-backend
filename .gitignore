@@ -25,6 +25,6 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
-/docker/droplet/.env
-/docker/droplet/aiven-ca.pem
+/docker/server/.env
+/docker/server/aiven-ca.pem
 .superpowers/

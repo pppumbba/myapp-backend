@@ -12,7 +12,7 @@ use Tests\TestCase;
 
 class PaymentsTest extends TestCase
 {
-    use RefreshDatabase;
+    use MarketTestHelpers, RefreshDatabase;
 
     private User $payer;
 
@@ -28,7 +28,7 @@ class PaymentsTest extends TestCase
         return Payments::invoice($this->payer, null, 'posting', $amount, Contract::factory()->create());
     }
 
-    public function test_paying_through_the_fake_provider_marks_the_payment_paid_once(): void
+    public function test_paying_at_the_provider_marks_the_payment_paid_once(): void
     {
         $payment = $this->invoice();
         $this->assertSame('pending', $payment->status);
@@ -37,8 +37,8 @@ class PaymentsTest extends TestCase
         Sanctum::actingAs($this->payer);
         $this->getJson("/api/market/payments/{$payment->id}")->assertOk()->assertJsonPath('status', 'pending');
 
-        $this->get("/market/pay/fake/{$payment->id}")->assertOk()->assertSee('10,000');
-        $this->get("/market/pay/fake/{$payment->id}/pay")->assertRedirect("http://front.test/market/payments?paid={$payment->id}");
+        TestPaymentDriver::pay($payment);
+        $this->post("/api/market/payments/{$payment->id}/callback")->assertOk();
 
         $paid = $this->getJson("/api/market/payments/{$payment->id}")->assertOk()->assertJsonPath('status', 'paid')->json();
         $this->assertMatchesRegularExpression('/^R-\d{4}-\d{6}$/', $paid['receipt_number']);
@@ -72,7 +72,7 @@ class PaymentsTest extends TestCase
         $payment = $this->invoice();
         Sanctum::actingAs($this->payer);
         $this->get("/api/market/payments/{$payment->id}/receipt")->assertStatus(422);
-        $this->get("/market/pay/fake/{$payment->id}/pay");
+        $this->payInvoice($payment->id);
 
         $this->get("/api/market/payments/{$payment->id}/receipt")->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->getJson('/api/market/payments')->assertOk()->assertJsonPath('data.0.id', $payment->id);
@@ -81,14 +81,5 @@ class PaymentsTest extends TestCase
         $this->getJson("/api/market/payments/{$payment->id}")->assertForbidden();
         $this->get("/api/market/payments/{$payment->id}/receipt")->assertForbidden();
         $this->getJson('/api/market/payments')->assertOk()->assertJsonCount(0, 'data');
-    }
-
-    public function test_the_fake_pay_page_is_not_there_in_production(): void
-    {
-        $payment = $this->invoice();
-        $this->app['env'] = 'production';
-
-        $this->get("/market/pay/fake/{$payment->id}")->assertNotFound();
-        $this->get("/market/pay/fake/{$payment->id}/pay")->assertNotFound();
     }
 }

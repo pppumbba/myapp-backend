@@ -56,7 +56,7 @@ class MetaDataController extends Controller
         'metas', 'meta_params', 'meta_types', 'meta_actions',
         'roles', 'user_roles', 'meta_permissions', 'wfm_status_permissions', 'user_notifications',
         'wfm_status', 'wfm_transition', 'wfm_status_log', 'widgets', 'schedules', 'meta_schedules', 'autonumbers',
-        'meta_process_workflow', 'meta_process_transition', 'meta_process_behaviour', 'meta_versions',
+        'meta_process_workflow', 'meta_process_transition', 'meta_process_behaviour', 'meta_versions', 'meta_structures',
         'meta_meta_map', 'meta_notification_map',
     ];
 
@@ -618,6 +618,18 @@ class MetaDataController extends Controller
         $request->setUserResolver(fn () => $user);
 
         return app(self::class)->store($request, $meta)->getData();
+    }
+
+    /**
+     * Runs a get meta as this user, the way GET /metas/{meta}/fill does, with these named
+     * parameters: its first row, or an empty object. Process flows run gets this way.
+     */
+    public static function fillAs(?User $user, Meta $meta, array $values): object
+    {
+        $request = Request::create("/api/metas/{$meta->id}/fill", 'GET', ['params' => array_map(fn ($v) => is_scalar($v) ? $v : null, $values)], server: ['HTTP_ACCEPT' => 'application/json']);
+        $request->setUserResolver(fn () => $user);
+
+        return (object) app(self::class)->fill($request, $meta)->getData(true);
     }
 
     /**

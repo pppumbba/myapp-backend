@@ -4,10 +4,8 @@ namespace App\Providers;
 
 use App\Models\PersonalAccessToken;
 use App\Support\Market\Dan\DanDriver;
-use App\Support\Market\Dan\FakeDanDriver;
 use App\Support\Market\Khur\FakeKhurDriver;
 use App\Support\Market\Khur\KhurDriver;
-use App\Support\Market\Pay\FakePaymentDriver;
 use App\Support\Market\Pay\PaymentDriver;
 use App\Support\Market\Pay\QPayDriver;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -25,13 +23,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // The market's DAN connection: only the fake one exists until the government agreement does.
+        // The market's DAN connection: none exists until the government agreement does.
         $this->app->bind(DanDriver::class, function () {
-            if (config('market.dan.driver') !== 'fake') {
-                throw new RuntimeException('Only the fake DAN driver exists yet.');
-            }
-
-            return new FakeDanDriver;
+            throw new RuntimeException('No DAN driver is connected yet.');
         });
         // The market's ХУР connection, likewise fake for now.
         $this->app->bind(KhurDriver::class, function () {
@@ -41,9 +35,8 @@ class AppServiceProvider extends ServiceProvider
 
             return new FakeKhurDriver;
         });
-        // Where market fees and escrow are paid: the fake test page, or QPay.
+        // Where market fees and escrow are paid: QPay.
         $this->app->bind(PaymentDriver::class, fn () => match (config('market.payments.driver')) {
-            'fake' => new FakePaymentDriver,
             'qpay' => new QPayDriver,
             default => throw new RuntimeException('Unknown market payment driver.'),
         });

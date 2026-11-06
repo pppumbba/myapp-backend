@@ -5,22 +5,32 @@ namespace Tests\Feature\Market;
 use App\Models\Bid;
 use App\Models\Company;
 use App\Models\Contract;
+use App\Models\Payment;
 use App\Models\Tender;
 use App\Models\User;
 use App\Support\Market\Companies;
 use App\Support\Market\Contracts;
+use App\Support\Market\Payments;
 use App\Support\Market\Tenders;
 
 /** Shared set-up for market tests: users DAN has already verified. */
 trait MarketTestHelpers
 {
-    /** A user verified as this test person (config market.fake.citizens). */
+    /** A user verified as this test person (TestDanDriver::CITIZENS). */
     protected function verifiedUser(string $registryNumber, string $name = 'Test Person'): User
     {
         $user = User::factory()->create();
         $user->forceFill(['registry_number' => $registryNumber, 'verified_name' => $name, 'verified_at' => now()])->save();
 
         return $user;
+    }
+
+    /** The invoice is paid at the provider, which the market then hears about. */
+    protected function payInvoice(int $paymentId): void
+    {
+        $payment = Payment::findOrFail($paymentId);
+        TestPaymentDriver::pay($payment);
+        Payments::refresh($payment);
     }
 
     /** The user (its director in the fake ХУР) registers the company and so acts for it with every right. */

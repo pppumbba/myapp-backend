@@ -7,9 +7,14 @@ use App\Models\MetaPermission;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\CustomerSchema;
+use App\Support\Market\Dan\DanDriver;
+use App\Support\Market\Pay\PaymentDriver;
+use App\Support\Market\Pay\QPayDriver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Str;
+use Tests\Feature\Market\TestDanDriver;
+use Tests\Feature\Market\TestPaymentDriver;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -19,6 +24,10 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Market stand-ins: no DAN driver exists yet, and payments are test money unless a test picks QPay.
+        $this->app->bind(DanDriver::class, fn () => new TestDanDriver);
+        $this->app->bind(PaymentDriver::class, fn () => config('market.payments.driver') === 'qpay' ? new QPayDriver : new TestPaymentDriver);
 
         if (in_array(RefreshDatabase::class, class_uses_recursive($this), true)) {
             $this->testCustomer = Customer::create(['code' => 'test', 'name' => 'Test', 'schema_name' => 'test']);
