@@ -35,6 +35,17 @@ return [
         ],
     ],
 
+    // Centrifugo pushes chat changes to browsers (App\Support\Realtime); off until all three are set.
+    'centrifugo' => [
+        // Where the API publishes, inside the server (e.g. http://centrifugo:8000).
+        'url' => env('CENTRIFUGO_URL'),
+        'api_key' => env('CENTRIFUGO_API_KEY'),
+        // Signs the browsers' connection tokens; Centrifugo checks them with the same secret.
+        'secret' => env('CENTRIFUGO_SECRET'),
+        // Where browsers connect; empty: APP_URL as ws(s)://…/connection/websocket.
+        'ws_url' => env('CENTRIFUGO_WS_URL'),
+    ],
+
     // Sign in with Google (GoogleAuthController); off until the client id and secret are set.
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),

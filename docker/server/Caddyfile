@@ -4,5 +4,7 @@
 	request_body {
 		max_size 60MB
 	}
+	# Chat push (Centrifugo); everything else is the API.
+	reverse_proxy /connection/* centrifugo:8000
 	reverse_proxy app:8080
 }

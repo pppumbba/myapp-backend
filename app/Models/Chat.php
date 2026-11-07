@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Realtime;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -62,7 +63,18 @@ class Chat extends Model
             // Writing a message means having read the chat up to it, and no longer typing.
             $this->members()->updateExistingPivot($user->id, ['last_read_message_id' => $message->id, 'typing_at' => null]);
         }
+        $this->nudge();
 
         return $message;
+    }
+
+    /**
+     * Tells the members' browsers the chat changed, so they fetch it now rather than on their next
+     * poll (Realtime). $except: someone who needn't hear, e.g. the one typing.
+     */
+    public function nudge(?int $except = null): void
+    {
+        $ids = $this->members()->pluck('users.id')->map(fn ($id) => (int) $id)->reject(fn (int $id) => $id === $except)->all();
+        Realtime::toUsers($ids, ['chat' => $this->id]);
     }
 }

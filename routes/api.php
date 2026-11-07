@@ -178,6 +178,7 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
 
     // The messenger (polled; see ChatController).
     Route::get('/chats/poll', [ChatController::class, 'poll']);
+    Route::get('/chats/realtime', [ChatController::class, 'realtime']);
     Route::get('/chats/people', [ChatController::class, 'people']);
     Route::get('/chats/search', [ChatController::class, 'search']);
     Route::post('/chats/direct', [ChatController::class, 'direct']);

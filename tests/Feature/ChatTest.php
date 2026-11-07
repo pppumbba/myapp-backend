@@ -6,7 +6,10 @@ use App\Models\Chat;
 use App\Models\Meta;
 use App\Models\MetaType;
 use App\Models\User;
+use App\Support\Realtime;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -113,5 +116,43 @@ class ChatTest extends TestCase
 
         $this->as($ann)->postJson("/api/chats/{$chatId}/messages", ['record' => ['meta_id' => 999999, 'record_id' => '1', 'title' => 'x']])->assertUnprocessable();
         $this->as($ann)->postJson("/api/chats/{$chatId}/messages", [])->assertUnprocessable();
+    }
+
+    public function test_changes_are_pushed_to_the_members_channels_when_centrifugo_is_set_up(): void
+    {
+        [$ann, $bob] = User::factory()->count(2)->create();
+        $chatId = $this->as($ann)->postJson('/api/chats/direct', ['user_id' => $bob->id])->json('id');
+
+        // Not set up: no token, nothing sent, and browsers keep polling.
+        Http::fake();
+        $this->as($ann)->getJson('/api/chats/realtime')->assertOk()->assertExactJson(['url' => null]);
+        $this->as($ann)->postJson("/api/chats/{$chatId}/messages", ['body' => 'Hi'])->assertCreated();
+        Http::assertNothingSent();
+
+        config(['services.centrifugo' => ['url' => 'http://centrifugo:8000', 'api_key' => 'key', 'secret' => 'secret', 'ws_url' => null]]);
+        $realtime = $this->as($ann)->getJson('/api/chats/realtime')->assertOk()->json();
+        $this->assertStringEndsWith('/connection/websocket', $realtime['url']);
+        [$head, $body, $signature] = explode('.', $realtime['token']);
+        $this->assertSame(rtrim(strtr(base64_encode(hash_hmac('sha256', "{$head}.{$body}", 'secret', true)), '+/', '-_'), '='), $signature);
+        $claims = json_decode(base64_decode(strtr($body, '-_', '+/')), true);
+        $this->assertSame((string) $ann->id, $claims['sub']);
+        $this->assertSame([Realtime::channel($ann->id)], $claims['channels']);
+
+        // A message reaches both members; typing only the other one.
+        $this->as($ann)->postJson("/api/chats/{$chatId}/messages", ['body' => 'Still there?'])->assertCreated();
+        $this->as($ann)->postJson("/api/chats/{$chatId}/typing")->assertOk();
+        $sent = Http::recorded()->map(fn (array $pair) => $pair[0]);
+        $this->assertCount(2, $sent);
+        $sent->each(function (Request $request) use ($chatId) {
+            $this->assertSame('http://centrifugo:8000/api/broadcast', $request->url());
+            $this->assertSame('key', $request->header('X-API-Key')[0]);
+            $this->assertSame(['chat' => $chatId], $request['data']);
+        });
+        $this->assertEqualsCanonicalizing([Realtime::channel($ann->id), Realtime::channel($bob->id)], $sent[0]['channels']);
+        $this->assertSame([Realtime::channel($bob->id)], $sent[1]['channels']);
+
+        // Centrifugo down: the message is still saved.
+        Http::fake(fn () => Http::response('', 500));
+        $this->as($bob)->postJson("/api/chats/{$chatId}/messages", ['body' => 'Yes'])->assertCreated();
     }
 }

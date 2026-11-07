@@ -7,9 +7,28 @@ services:
     env_file: .env.production
     environment:
       PORT: 8080
+      # Chat push; the two secrets are set once in .env next to this file (setup.sh makes them).
+      CENTRIFUGO_URL: http://centrifugo:8000
+      CENTRIFUGO_API_KEY: ${CENTRIFUGO_API_KEY}
+      CENTRIFUGO_SECRET: ${CENTRIFUGO_SECRET}
     volumes:
       - app-storage:/var/www/html/storage/app
       - ./aiven-ca.pem:/etc/secrets/aiven-ca.pem:ro
+    restart: unless-stopped
+
+  # Pushes chat changes to browsers over WebSockets (App\Support\Realtime). The API publishes to it
+  # inside the network; browsers reach it through Caddy at /connection/websocket.
+  centrifugo:
+    image: centrifugo/centrifugo:v6.10.1
+    command: centrifugo
+    environment:
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: ${CENTRIFUGO_SECRET}
+      CENTRIFUGO_HTTP_API_KEY: ${CENTRIFUGO_API_KEY}
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: ${CENTRIFUGO_ALLOWED_ORIGINS}
+      CENTRIFUGO_HEALTH_ENABLED: "true"
+      CENTRIFUGO_LOG_LEVEL: warn
+    ulimits:
+      nofile: 65536
     restart: unless-stopped
 
   caddy:
@@ -25,6 +44,7 @@ services:
       - caddy-config:/config
     depends_on:
       - app
+      - centrifugo
     restart: unless-stopped
 
 volumes:

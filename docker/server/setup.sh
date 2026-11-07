@@ -25,4 +25,10 @@ if [ ! -d /opt/myapp-backend ]; then
     git clone https://github.com/pppumbba/myapp-backend.git /opt/myapp-backend
 fi
 
-echo "Done. Next, in /opt/myapp-backend/docker/server: .env.production (from .env.production.example), aiven-ca.pem, and .env with DOMAIN=..."
+# Compose's own .env: the address Caddy serves and the chat push secrets, made here once.
+ENVF=/opt/myapp-backend/docker/server/.env
+grep -q '^CENTRIFUGO_SECRET=' "$ENVF" 2>/dev/null || echo "CENTRIFUGO_SECRET=$(openssl rand -hex 32)" >> "$ENVF"
+grep -q '^CENTRIFUGO_API_KEY=' "$ENVF" 2>/dev/null || echo "CENTRIFUGO_API_KEY=$(openssl rand -hex 32)" >> "$ENVF"
+chmod 600 "$ENVF"
+
+echo "Done. Next, in /opt/myapp-backend/docker/server: .env.production (from .env.production.example), aiven-ca.pem, and in .env DOMAIN=... and CENTRIFUGO_ALLOWED_ORIGINS=<the frontend's address>"

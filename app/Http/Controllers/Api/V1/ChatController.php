@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Chat;
 use App\Models\ChatMessage;
 use App\Models\User;
+use App\Support\Realtime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -59,6 +60,15 @@ class ChatController extends Controller
         return response()->json(['messages' => $rows->map(fn (ChatMessage $m) => $this->message($m)), 'more' => $rows->count() === self::PAGE]);
     }
 
+    /**
+     * GET /chats/realtime — how this browser gets chat changes pushed: {url, token, expires_at},
+     * or {url: null} when push isn't set up, and it keeps polling.
+     */
+    public function realtime(Request $request): JsonResponse
+    {
+        return response()->json(Realtime::connection($request->user()) ?? ['url' => null]);
+    }
+
     /** POST /chats/direct {user_id} — the chat with that user, started if there is none yet. */
     public function direct(Request $request): JsonResponse
     {
@@ -70,6 +80,7 @@ class ChatController extends Controller
 
             return $chat;
         });
+        $chat->nudge($user->id);
 
         return response()->json($this->summaryOf($chat, $user));
     }
@@ -182,6 +193,8 @@ class ChatController extends Controller
         $id = (int) $request->validate(['message_id' => ['required', 'integer', 'min:0']])['message_id'];
         DB::table('chat_members')->where('chat_id', $chat->id)->where('user_id', $user->id)->where('last_read_message_id', '<', $id)
             ->update(['last_read_message_id' => min($id, (int) $chat->messages()->max('id'))]);
+        // Others see it as Seen; the user's other tabs drop the unread count.
+        $chat->nudge();
 
         return response()->json(['ok' => true]);
     }
@@ -191,6 +204,7 @@ class ChatController extends Controller
     {
         $user = $this->member($request, $chat);
         DB::table('chat_members')->where('chat_id', $chat->id)->where('user_id', $user->id)->update(['typing_at' => now()]);
+        $chat->nudge($user->id);
 
         return response()->json(['ok' => true]);
     }
