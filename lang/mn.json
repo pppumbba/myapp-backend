@@ -410,5 +410,7 @@
   "You are the last admin of this customer.": "Та энэ харилцагчийн сүүлчийн админ байна.",
   "You are not in this customer.": "Та энэ харилцагчид хамаарахгүй.",
   "Removed.": "Хасагдлаа.",
-  "This domain is used by another customer.": "Энэ домэйныг өөр харилцагч ашиглаж байна."
+  "This domain is used by another customer.": "Энэ домэйныг өөр харилцагч ашиглаж байна.",
+  "This app is not set up for phones.": "Энэ апп утсанд тохируулагдаагүй байна.",
+  "Another app already uses this package id.": "Энэ багцын дугаарыг өөр апп ашиглаж байна."
 }

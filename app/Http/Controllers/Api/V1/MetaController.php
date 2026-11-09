@@ -158,6 +158,27 @@ class MetaController extends Controller
             'tag_ids.*' => ['integer', 'distinct', 'exists:tags,id'],
         ]);
 
+        // An app built into its own phone app (MobileController): the Android package id names it in
+        // the store, so no two apps may share one. Checked apart, as nested rules would drop json_config's other keys.
+        if (is_array($data['json_config'] ?? null) && array_key_exists('mobile', $data['json_config'])) {
+            $request->validate([
+                'json_config.mobile' => ['sometimes', 'nullable', 'array'],
+                'json_config.mobile.enabled' => ['sometimes', 'boolean'],
+                'json_config.mobile.name' => ['nullable', 'string', 'max:30'],
+                'json_config.mobile.package_id' => [
+                    'nullable', 'string', 'max:100', 'regex:/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/',
+                    function (string $attribute, mixed $value, \Closure $fail) use ($current) {
+                        $taken = Meta::query()->when($current, fn ($q) => $q->whereKeyNot($current->id))
+                            ->where('json_config->mobile->package_id', $value)->exists();
+                        if ($taken) {
+                            $fail(__('Another app already uses this package id.'));
+                        }
+                    },
+                ],
+                'json_config.mobile.color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            ]);
+        }
+
         if (! empty($data['ref_meta_id']) && $current && (int) $data['ref_meta_id'] === $current->id) {
             abort(422, 'A meta cannot reference itself.');
         }

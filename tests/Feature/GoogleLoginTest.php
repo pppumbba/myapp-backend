@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\SocialAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -106,6 +107,50 @@ class GoogleLoginTest extends TestCase
 
         $this->assertStringContainsString('google_error', $back);
         Http::assertNothingSent();
+    }
+
+    /** A phone app's sign-in: Google, then back to the app's link with a code that needs the app's secret. */
+    private function phoneSignIn(string $verifier, string $state = ''): array
+    {
+        Http::fake([
+            'oauth2.googleapis.com/token' => Http::response(['access_token' => 'at-1']),
+            'openidconnect.googleapis.com/*' => Http::response(['sub' => 'g-9', 'email' => 'bat@gmail.com', 'email_verified' => true, 'name' => 'Bat']),
+        ]);
+        $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+        $toGoogle = $this->get('/auth/google/redirect?'.http_build_query(['app' => 'mn.wand.eam-app', 'challenge' => $challenge]))
+            ->assertRedirect()->headers->get('Location');
+        parse_str((string) parse_url($toGoogle, PHP_URL_QUERY), $sent);
+        // The in-app browser may not keep cookies: the state must work without the session.
+        $this->flushSession();
+
+        $back = $this->get('/auth/google/callback?'.http_build_query(['code' => 'c-1', 'state' => $state ?: $sent['state']]))
+            ->assertRedirect()->headers->get('Location');
+        $this->assertStringStartsWith('mn.wand.eam-app://google-auth?', $back);
+        parse_str((string) parse_url($back, PHP_URL_QUERY), $query);
+
+        return $query;
+    }
+
+    public function test_a_phone_app_gets_its_code_back_on_its_own_link_and_must_prove_it_started(): void
+    {
+        $this->withoutMiddleware(ThrottleRequests::class);
+        $verifier = str_repeat('v', 64);
+        $code = $this->phoneSignIn($verifier)['google_code'];
+
+        // Without the app's secret (or with a wrong one) the code is spent and useless.
+        $this->postJson('/api/auth/google/exchange', ['code' => $code])->assertUnauthorized();
+
+        $code = $this->phoneSignIn($verifier)['google_code'];
+        $this->postJson('/api/auth/google/exchange', ['code' => $code, 'verifier' => $verifier])
+            ->assertOk()->assertJsonPath('user.email', 'bat@gmail.com');
+    }
+
+    public function test_a_phone_app_with_a_bad_link_or_challenge_goes_the_web_way(): void
+    {
+        foreach ([['app' => 'javascript:alert(1)//x', 'challenge' => str_repeat('a', 43)], ['app' => 'mn.wand.eam-app', 'challenge' => 'short']] as $q) {
+            $this->get('/auth/google/redirect?'.http_build_query($q))->assertRedirect();
+            $this->assertNotNull(session('google_state'), 'a web sign-in keeps its state in the session');
+        }
     }
 
     public function test_the_providers_say_whether_google_is_set_up(): void

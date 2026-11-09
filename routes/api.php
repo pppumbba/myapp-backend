@@ -36,6 +36,7 @@ use App\Http\Controllers\Api\V1\MetaTransferController;
 use App\Http\Controllers\Api\V1\MetaTypeController;
 use App\Http\Controllers\Api\V1\MetaUsageController;
 use App\Http\Controllers\Api\V1\MetaVersionController;
+use App\Http\Controllers\Api\V1\MobileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationRuleController;
 use App\Http\Controllers\Api\V1\PageController;
@@ -387,6 +388,8 @@ $publicRoutes = function () {
     Route::get('/metas/{meta}/params', [MetaParamController::class, 'index']);
     Route::get('/metas/{meta}/actions', [MetaActionController::class, 'index']);
     Route::get('/workflows/{meta}', [WorkflowController::class, 'show']);
+    // A phone app's name and colour, shown before signing in.
+    Route::get('/mobile/{meta}', [MobileController::class, 'show'])->whereNumber('meta');
 
     // The values a form opens with, from a get meta.
     Route::get('/metas/{meta}/fill', [MetaDataController::class, 'fill']);

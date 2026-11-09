@@ -23,6 +23,11 @@ use Throwable;
  * verified email (and linked), else a new account when sign-ups are on. The browser then goes
  * to the frontend's /login with a one-time code, which exchange() turns into the usual token,
  * so the token never shows up in a URL.
+ *
+ * The phone apps start with ?app=<link scheme>&challenge=<sha256 of a secret, base64url>. Their
+ * state is kept in the cache (the in-app browser's cookies can't be counted on), and they are sent
+ * back to <link scheme>://google-auth with the code. exchange() then wants the secret itself, so a
+ * code caught by some other app on the phone is no use to it.
  */
 class GoogleAuthController extends Controller
 {
@@ -41,11 +46,16 @@ class GoogleAuthController extends Controller
     /** GET /auth/google/redirect — off to Google's sign-in page. */
     public function redirect(Request $request): RedirectResponse
     {
+        $app = $this->phoneApp($request);
         if (! self::enabled()) {
-            return $this->toFrontend(['google_error' => __('Signing in with Google is not set up.')]);
+            return $this->back($app, ['google_error' => __('Signing in with Google is not set up.')]);
         }
         $state = Str::random(40);
-        $request->session()->put('google_state', $state);
+        if ($app) {
+            Cache::put("google-app-state:{$state}", $app, now()->addMinutes(10));
+        } else {
+            $request->session()->put('google_state', $state);
+        }
         $config = config('services.google');
 
         return redirect()->away(self::AUTH_URL.'?'.http_build_query(array_filter([
@@ -63,13 +73,16 @@ class GoogleAuthController extends Controller
     /** GET /auth/google/callback — back from Google: find or make the user, hand the frontend a one-time code. */
     public function callback(Request $request): RedirectResponse
     {
-        $state = $request->session()->pull('google_state');
-        if (! self::enabled() || ! is_string($state) || ! hash_equals($state, (string) $request->query('state'))) {
-            return $this->toFrontend(['google_error' => __('The Google sign-in expired. Try again.')]);
+        $sent = (string) $request->query('state');
+        $app = $sent !== '' ? Cache::pull("google-app-state:{$sent}") : null;
+        $app = is_array($app) ? $app : null;
+        $state = $app ? $sent : $request->session()->pull('google_state');
+        if (! self::enabled() || ! is_string($state) || ! hash_equals($state, $sent)) {
+            return $this->back($app, ['google_error' => __('The Google sign-in expired. Try again.')]);
         }
         if ($request->filled('error') || ! $request->filled('code')) {
             // The person pressed Cancel at Google, or Google refused.
-            return $this->toFrontend(['google_error' => __('Google sign-in was cancelled.')]);
+            return $this->back($app, ['google_error' => __('Google sign-in was cancelled.')]);
         }
 
         try {
@@ -77,25 +90,34 @@ class GoogleAuthController extends Controller
         } catch (Throwable $e) {
             report($e);
 
-            return $this->toFrontend(['google_error' => __('Google could not be reached. Try again.')]);
+            return $this->back($app, ['google_error' => __('Google could not be reached. Try again.')]);
         }
 
         $user = $this->userFor($profile);
         if (is_string($user)) {
-            return $this->toFrontend(['google_error' => $user]);
+            return $this->back($app, ['google_error' => $user]);
         }
 
         $code = Str::random(64);
-        Cache::put("google-login:{$code}", $user->id, now()->addMinute());
+        Cache::put("google-login:{$code}", $app ? ['user' => $user->id, 'challenge' => $app['challenge']] : $user->id, now()->addMinute());
 
-        return $this->toFrontend(['google_code' => $code]);
+        return $this->back($app, ['google_code' => $code]);
     }
 
     /** POST /api/auth/google/exchange {code} — the one-time code for the user and a token. */
     public function exchange(Request $request): JsonResponse
     {
-        $data = $request->validate(['code' => ['required', 'string', 'max:100']]);
-        $user = User::find(Cache::pull("google-login:{$data['code']}"));
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:100'],
+            'verifier' => ['nullable', 'string', 'max:128'],
+        ]);
+        $held = Cache::pull("google-login:{$data['code']}");
+        if (is_array($held)) {
+            // A phone app's code: only the app that holds the secret behind the challenge may use it.
+            $proof = rtrim(strtr(base64_encode(hash('sha256', (string) ($data['verifier'] ?? ''), true)), '+/', '-_'), '=');
+            $held = hash_equals((string) $held['challenge'], $proof) ? $held['user'] : null;
+        }
+        $user = $held ? User::find($held) : null;
         if (! $user) {
             return response()->json(['message' => __('The Google sign-in expired. Try again.')], 401);
         }
@@ -181,6 +203,29 @@ class GoogleAuthController extends Controller
         $user->socialAccounts()->updateOrCreate(['provider' => 'google', 'provider_id' => $profile['sub']], ['email' => $profile['email']]);
 
         return $user;
+    }
+
+    /**
+     * A phone app's sign-in: its link scheme (its package id, with - for _) and PKCE-style challenge.
+     * The scheme must have a dot, which also keeps out http, javascript and the like.
+     *
+     * @return array{app: string, challenge: string}|null
+     */
+    private function phoneApp(Request $request): ?array
+    {
+        $app = (string) $request->query('app');
+        $challenge = (string) $request->query('challenge');
+        if (! preg_match('/^[a-z][a-z0-9+-]*(\.[a-z0-9+-]+)+$/', $app) || ! preg_match('/^[A-Za-z0-9_-]{43,128}$/', $challenge)) {
+            return null;
+        }
+
+        return ['app' => $app, 'challenge' => $challenge];
+    }
+
+    /** Back with a code or an error: to the phone app that started, else the frontend's login page. */
+    private function back(?array $app, array $query): RedirectResponse
+    {
+        return $app ? redirect()->away("{$app['app']}://google-auth?".http_build_query($query)) : $this->toFrontend($query);
     }
 
     /** Back to the frontend's login page with a code or an error. */
