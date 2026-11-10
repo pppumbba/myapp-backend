@@ -176,6 +176,8 @@ class MetaController extends Controller
                     },
                 ],
                 'json_config.mobile.color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+                // Set by POST /metas/{meta}/mobile-icon; a save may only keep or clear it, never point elsewhere.
+                'json_config.mobile.icon' => ['nullable', 'string', 'regex:'.MobileController::ICON_FILE, Rule::in(array_filter([$current ? MobileController::iconFile($current) : null]))],
             ]);
         }
 

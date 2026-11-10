@@ -412,5 +412,8 @@
   "Removed.": "Хасагдлаа.",
   "This domain is used by another customer.": "Энэ домэйныг өөр харилцагч ашиглаж байна.",
   "This app is not set up for phones.": "Энэ апп утсанд тохируулагдаагүй байна.",
+  "This app has no icon.": "Энэ аппад дүрс тэмдэг алга.",
+  "Only apps have a phone icon.": "Зөвхөн апп утасны дүрс тэмдэгтэй.",
+  "The icon must be square and at least 192 × 192 pixels.": "Дүрс тэмдэг дөрвөлжин, хамгийн багадаа 192 × 192 пиксел байх ёстой.",
   "Another app already uses this package id.": "Энэ багцын дугаарыг өөр апп ашиглаж байна."
 }

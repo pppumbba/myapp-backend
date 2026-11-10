@@ -3,10 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\Meta;
+use App\Models\MetaParam;
 use App\Models\User;
 use Database\Seeders\EamDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -62,6 +65,54 @@ class EamDemoTest extends TestCase
         $this->assertEquals(220000, $order->total_cost);
         // Not raised from a plan, so no step ran.
         $this->assertSame([], $res->json('_processes') ?? []);
+    }
+
+    public function test_a_work_order_keeps_its_photos_and_the_grid_lists_them(): void
+    {
+        Storage::fake('local');
+        $form = $this->metaId('eam_work_order_form');
+        $param = MetaParam::where('main_meta_id', $form)->where('field_path', 'attachments')->firstOrFail();
+        $upload = fn (string $name) => $this->post("/api/metas/{$form}/files", ['param_id' => $param->id, 'file' => UploadedFile::fake()->create($name, 200)], ['Accept' => 'application/json']);
+
+        $upload('notes.txt')->assertJsonValidationErrors('file');
+        $photo = $upload('leak.jpg')->assertCreated()->json();
+
+        $res = $this->postJson("/api/metas/{$form}/data", [
+            'asset_id' => $this->assetId('Forklift'),
+            'title' => 'Hydraulic leak',
+            'type' => 'corrective',
+            'priority' => 'high',
+            'status' => 'open',
+            'attachments' => [['id' => $photo['id'], 'description' => 'Under the mast']],
+        ])->assertCreated();
+
+        $row = collect($this->getJson('/api/metas/'.$this->metaId('eam_work_orders_grid').'/data?per_page=200')->json('data'))
+            ->firstWhere('id', $res->json('id'));
+        $this->assertSame('leak.jpg', $row['attachments'][0]['file_name']);
+        $this->assertSame('Under the mast', $row['attachments'][0]['description']);
+    }
+
+    public function test_an_asset_audit_is_in_the_menu_and_saves_its_counted_assets_as_lines(): void
+    {
+        $grid = $this->metaId('eam_audits_grid');
+        $assetsGroup = DB::table('meta_params')->where('main_meta_id', $this->metaId('eam_app'))->whereNull('parent_id')->where('field_path', 'assets')->value('id');
+        $this->assertSame($assetsGroup, DB::table('meta_params')->where('ref_meta_id', $grid)->where('field_path', 'asset_audits')->value('parent_id'));
+        // The line's asset is a lookup, so the lines get a Choose button that picks many.
+        $this->assertSame($this->metaId('eam_assets_lookup'), (int) DB::table('meta_params')->where('main_meta_id', $this->metaId('eam_audit_line_form'))->where('field_path', 'asset_id')->where('is_select', true)->value('ref_meta_id'));
+
+        $res = $this->postJson('/api/metas/'.$this->metaId('eam_audit_form').'/data', [
+            'audit_date' => '2026-11-10',
+            'location_id' => DB::table('eam_locations')->where('code', 'PLT-1')->value('id'),
+            'status' => 'open',
+            'lines' => [
+                ['asset_id' => $this->assetId('Forklift'), 'found' => true, 'condition' => 'good'],
+                ['asset_id' => $this->assetId('Core switch'), 'found' => false],
+            ],
+        ])->assertCreated();
+
+        $this->assertMatchesRegularExpression('/^AUD-\d{4}\d{3}$/', DB::table('eam_audits')->where('id', $res->json('id'))->value('audit_no'));
+        $this->assertSame(2, DB::table('eam_audit_lines')->where('audit_id', $res->json('id'))->count());
+        $this->assertSame(1, DB::table('eam_audit_lines')->where('audit_id', $res->json('id'))->where('found', false)->count());
     }
 
     public function test_saving_a_transfer_moves_the_asset(): void

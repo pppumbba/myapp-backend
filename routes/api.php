@@ -202,6 +202,9 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     Route::post('/metas/{meta}/translations/import', [TranslationController::class, 'import'])->middleware('meta.version');
     Route::get('/themes', [ThemeController::class, 'index']);
     Route::put('/metas/{meta}/theme', [ThemeController::class, 'save'])->middleware('meta.version');
+    // A phone app's launcher icon (MobileController).
+    Route::post('/metas/{meta}/mobile-icon', [MobileController::class, 'saveIcon'])->middleware('meta.version');
+    Route::delete('/metas/{meta}/mobile-icon', [MobileController::class, 'deleteIcon'])->middleware('meta.version');
     Route::get('/user/session', [SessionValueController::class, 'mine']);
     Route::post('/user/session/refresh', [SessionValueController::class, 'refresh']);
     Route::post('/session-values/test', [SessionValueController::class, 'test']);
@@ -390,6 +393,7 @@ $publicRoutes = function () {
     Route::get('/workflows/{meta}', [WorkflowController::class, 'show']);
     // A phone app's name and colour, shown before signing in.
     Route::get('/mobile/{meta}', [MobileController::class, 'show'])->whereNumber('meta');
+    Route::get('/mobile/{meta}/icon', [MobileController::class, 'icon'])->whereNumber('meta');
 
     // The values a form opens with, from a get meta.
     Route::get('/metas/{meta}/fill', [MetaDataController::class, 'fill']);

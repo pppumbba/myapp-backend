@@ -25,7 +25,8 @@ use Illuminate\Support\Str;
  *   ├─ Assets (menu group)
  *   │  ├─ Asset register     -> datagrid with sidebar filters; each row opens its workspace
  *   │  ├─ Asset workspace    -> one asset: its work orders, PM plans, meter readings, transfers, finance
- *   │  └─ Transfers         -> datagrid; saving a transfer moves the asset (process flow)
+ *   │  ├─ Transfers         -> datagrid; saving a transfer moves the asset (process flow)
+ *   │  └─ Asset audits      -> counts of a location, assets as lines (EamAuditSeeder, called at the end)
  *   ├─ Maintenance (menu group)
  *   │  ├─ Work orders        -> datagrid with parts as lines and a "Complete" stage query button
  *   │  ├─ Maintenance calendar -> calendar of scheduled work orders, coloured by type
@@ -63,6 +64,9 @@ class EamDemoSeeder extends Seeder
 
     private const WO_TYPES = ['corrective', 'preventive', 'inspection', 'calibration'];
 
+    /** Work order and asset files: pictures a phone takes, PDFs and office files, 10 MB each, ten per record. */
+    private const ATTACHMENTS = ['accept' => ['jpg', 'jpeg', 'png', 'heic', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx'], 'max_size' => 10240, 'max_files' => 10];
+
     private const WO_STATUSES = ['open', 'assigned', 'in progress', 'on hold', 'completed', 'cancelled'];
 
     private const METERS = ['hours', 'km', 'cycles', 'kWh'];
@@ -81,6 +85,7 @@ class EamDemoSeeder extends Seeder
             $this->metas();
         });
         $this->call(EamFinanceSeeder::class);
+        $this->call(EamAuditSeeder::class);
     }
 
     private function metas(): void
@@ -158,6 +163,7 @@ class EamDemoSeeder extends Seeder
             ['useful_life_years', 'Useful life (years)', 'integer', ['min_value' => '1']],
             ['warranty_until', 'Warranty until', 'date'],
             ['notes', 'Notes', 'text', ['render_type' => 'textarea']],
+            ['attachments', 'Photos and documents', 'multifile', ['json_config' => self::ATTACHMENTS]],
         ]);
 
         $assetColumns = [
@@ -210,6 +216,7 @@ class EamDemoSeeder extends Seeder
             ['labor_cost', 'Labor cost', 'decimal', ['min_value' => '0', 'default_value' => '0', 'render_type' => 'money']],
             ['description', 'What is wrong / what to do', 'text', ['render_type' => 'textarea']],
             ['resolution', 'What was done', 'text', ['render_type' => 'textarea']],
+            ['attachments', 'Photos and documents', 'multifile', ['json_config' => self::ATTACHMENTS]],
             ['parts', 'Parts used', 'detail', ['ref_meta_id' => $partForm->id, 'json_config' => [
                 'foreign_key' => 'work_order_id',
                 'amount' => ['quantity', 'unit_cost'],
@@ -229,6 +236,7 @@ class EamDemoSeeder extends Seeder
             ['scheduled_start', 'Scheduled', 'datetime'],
             ['completed_on', 'Completed', 'date'],
             ['total_cost', 'Cost', 'decimal', ['render_type' => 'money']],
+            ['attachments', 'Files', 'multifile'],
             ['status', 'Status', 'string', ['render_type' => 'status', 'is_criteria' => true, 'json_config' => ['options' => self::WO_STATUSES]]],
         ];
         $complete = $this->stageQuery('eam_complete_work_order', 'Complete work order', 'eam_work_orders', <<<'SQL'
