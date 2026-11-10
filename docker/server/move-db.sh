@@ -47,5 +47,5 @@ if [ -n "$FILES" ]; then
         chown -R www-data:www-data ."
 fi
 
-./deploy.sh
+sh ./deploy.sh
 echo "Done. The app now uses the MySQL on this server. Nightly backups: see backup.sh."
