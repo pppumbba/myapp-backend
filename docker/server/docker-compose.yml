@@ -1,6 +1,6 @@
 # The API on our own server (Hetzner Cloud): the same image as Render, behind Caddy for HTTPS.
-# Uploads and PDFs live in the app-storage volume, so they survive restarts and deploys.
-# Run from docker/server: docker compose up -d --build
+# Uploads and PDFs live in the app-storage volume, the database in mysql-data, so both survive
+# restarts and deploys. Run from docker/server: docker compose up -d --build
 services:
   app:
     build: ../..
@@ -11,9 +11,42 @@ services:
       CENTRIFUGO_URL: http://centrifugo:8000
       CENTRIFUGO_API_KEY: ${CENTRIFUGO_API_KEY}
       CENTRIFUGO_SECRET: ${CENTRIFUGO_SECRET}
+      # The MySQL below (these win over .env.production). Schema names are the ones the data came
+      # with (move-db.sh): DB_MAIN_DATABASE holds users and logins, DB_DATABASE is the first customer's.
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: wand
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE:-laravel_adopt_customertest}
+      DB_MAIN_DATABASE: ${DB_MAIN_DATABASE:-laravel_main_customertest}
+      # No TLS inside the server's own network (Aiven needed a CA; start.sh only sets one if given).
+      MYSQL_ATTR_SSL_CA: ""
+      MYSQL_CA_CERT: ""
     volumes:
       - app-storage:/var/www/html/storage/app
-      - ./aiven-ca.pem:/etc/secrets/aiven-ca.pem:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # The database, on this server only: no port is published, the app reaches it as mysql:3306.
+  # The wand user may make schemas (one per customer), views and triggers, like Aiven's avnadmin.
+  mysql:
+    image: mysql:8.4.3
+    command: ["--log-bin-trust-function-creators=1", "--skip-name-resolve"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
     restart: unless-stopped
 
   # Pushes chat changes to browsers over WebSockets (App\Support\Realtime). The API publishes to it
@@ -49,5 +82,6 @@ services:
 
 volumes:
   app-storage:
+  mysql-data:
   caddy-data:
   caddy-config:
