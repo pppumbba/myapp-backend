@@ -38,7 +38,7 @@ class StructureController extends Controller
     private const FIELDS = [
         'field_path', 'param_name', 'column_path', 'label_name', 'data_type', 'data_mask', 'render_type', 'icon_cls',
         'ref_meta_id', 'is_primary', 'is_show', 'is_required', 'is_criteria', 'is_unique', 'is_select', 'is_label',
-        'default_value', 'min_value', 'max_value', 'column_width', 'json_config', 'display_field', 'value_field',
+        'default_value', 'min_value', 'max_value', 'column_width', 'group_type', 'json_config', 'display_field', 'value_field',
     ];
 
     private const BOOLEANS = ['is_primary', 'is_show', 'is_required', 'is_criteria', 'is_unique', 'is_select', 'is_label'];
@@ -276,7 +276,7 @@ class StructureController extends Controller
 
         $problem = Autonumber::problem($values['json_config']['autonumber'] ?? null);
         abort_if($problem !== null, 422, $problem ?? '');
-        Builders::checkParam(request()->user(), $values);
+        Builders::checkParam(request()->user(), $values, $meta);
 
         return $values;
     }
@@ -322,7 +322,7 @@ class StructureController extends Controller
                 'icon_cls' => isset($a['icon_cls']) && $a['icon_cls'] !== '' ? mb_substr((string) $a['icon_cls'], 0, 50) : null,
                 'form_meta_id' => $formId,
                 'get_meta_id' => $getId,
-                'needs_row' => (bool) ($a['needs_row'] ?? false),
+                'needs_row' => $kind === 'consolidate' || (bool) ($a['needs_row'] ?? false),
                 'show_in_toolbar' => (bool) ($a['show_in_toolbar'] ?? true),
                 'show_in_row' => (bool) ($a['show_in_row'] ?? false),
                 'order_number' => $i + 1,

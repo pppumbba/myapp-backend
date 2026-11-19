@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AccessController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\AvatarController;
 use App\Http\Controllers\Api\V1\ChartController;
 use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\ContentController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Api\V1\Market\ReviewController;
 use App\Http\Controllers\Api\V1\Market\TenderApplicationController;
 use App\Http\Controllers\Api\V1\Market\TenderController;
 use App\Http\Controllers\Api\V1\MatrixController;
+use App\Http\Controllers\Api\V1\MenuStyleController;
 use App\Http\Controllers\Api\V1\MetaActionController;
 use App\Http\Controllers\Api\V1\MetaController;
 use App\Http\Controllers\Api\V1\MetaCopyController;
@@ -73,6 +75,9 @@ Route::post('/auth/google/exchange', [GoogleAuthController::class, 'exchange'])-
 // Attached files: public ones open for anyone, the rest check the token (ContentController).
 Route::get('/contents/{content}', [ContentController::class, 'show'])->whereNumber('content')->middleware('throttle:120,1');
 
+// Profile pictures: an <img> sends no token, so open to anyone with the (random) name.
+Route::get('/avatars/{file}', [AvatarController::class, 'show'])->middleware('throttle:300,1');
+
 // The payment provider tells us an invoice changed; we ask the provider again rather than trust it.
 Route::match(['get', 'post'], '/market/payments/{payment}/callback', [PaymentController::class, 'callback'])->whereNumber('payment')->middleware('throttle:60,1');
 
@@ -82,6 +87,8 @@ Route::middleware(['auth:sanctum', 'customer:optional'])->group(function () {
     Route::get('/user', [ProfileController::class, 'show']);
     Route::put('/user', [ProfileController::class, 'update']);
     Route::put('/user/preferences', [ProfileController::class, 'preferences']);
+    Route::post('/user/avatar', [AvatarController::class, 'store'])->middleware('throttle:20,1');
+    Route::delete('/user/avatar', [AvatarController::class, 'destroy']);
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:customers');
     Route::post('/customers/join', [CustomerController::class, 'join'])->middleware('throttle:customers-join');
     Route::post('/customers/{customer}/use', [CustomerController::class, 'use'])->whereNumber('customer');
@@ -202,6 +209,7 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     Route::post('/metas/{meta}/translations/import', [TranslationController::class, 'import'])->middleware('meta.version');
     Route::get('/themes', [ThemeController::class, 'index']);
     Route::put('/metas/{meta}/theme', [ThemeController::class, 'save'])->middleware('meta.version');
+    Route::put('/metas/{meta}/menu-style', [MenuStyleController::class, 'save'])->middleware('meta.version');
     // A phone app's launcher icon (MobileController).
     Route::post('/metas/{meta}/mobile-icon', [MobileController::class, 'saveIcon'])->middleware('meta.version');
     Route::delete('/metas/{meta}/mobile-icon', [MobileController::class, 'deleteIcon'])->middleware('meta.version');
@@ -391,12 +399,15 @@ $publicRoutes = function () {
     Route::get('/metas/{meta}/params', [MetaParamController::class, 'index']);
     Route::get('/metas/{meta}/actions', [MetaActionController::class, 'index']);
     Route::get('/workflows/{meta}', [WorkflowController::class, 'show']);
+    // Menu styles, so a portal app keeps its own menu for guests too (MenuStyleController).
+    Route::get('/menu-styles', [MenuStyleController::class, 'index']);
     // A phone app's name and colour, shown before signing in.
     Route::get('/mobile/{meta}', [MobileController::class, 'show'])->whereNumber('meta');
     Route::get('/mobile/{meta}/icon', [MobileController::class, 'icon'])->whereNumber('meta');
 
     // The values a form opens with, from a get meta.
     Route::get('/metas/{meta}/fill', [MetaDataController::class, 'fill']);
+    Route::post('/metas/{meta}/consolidate/{action}', [MetaDataController::class, 'consolidate']);
     Route::get('/metas/{meta}/chart', [ChartController::class, 'show']);
     Route::get('/metas/{meta}/page', [PageController::class, 'show']);
     Route::get('/metas/{meta}/matrix', [MatrixController::class, 'show']);

@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class MetaAction extends Model
 {
-    public const ACTIONS = ['add', 'edit', 'delete', 'custom', 'import', 'stage_query'];
+    public const ACTIONS = ['add', 'edit', 'delete', 'custom', 'import', 'stage_query', 'consolidate'];
 
     protected $fillable = [
         'grid_meta_id', 'action', 'label', 'icon_cls', 'form_meta_id', 'get_meta_id',

@@ -10,6 +10,7 @@ use App\Support\Autonumber;
 use App\Support\Builders;
 use App\Support\Criteria;
 use App\Support\FilterLookups;
+use App\Support\Formula;
 use App\Support\GridReuse;
 use App\Support\Translations;
 use Illuminate\Http\JsonResponse;
@@ -54,7 +55,7 @@ class MetaParamController extends Controller
     {
         Access::requireDesign($request->user(), $meta);
         $data = $this->validated($request, $meta);
-        Builders::checkParam($request->user(), $data);
+        Builders::checkParam($request->user(), $data, $meta);
         $data['main_meta_id'] = $meta->id;
 
         $param = MetaParam::create($data);
@@ -75,7 +76,7 @@ class MetaParamController extends Controller
     {
         Access::requireDesign($request->user(), $param->main_meta_id);
         $data = $this->validated($request, $param->main, $param);
-        Builders::checkParam($request->user(), $data);
+        Builders::checkParam($request->user(), $data, $param->main);
 
         $param->update($data);
 
@@ -125,6 +126,7 @@ class MetaParamController extends Controller
             'min_value' => ['nullable', 'string', 'max:255'],
             'max_value' => ['nullable', 'string', 'max:255'],
             'column_width' => ['nullable', 'string', 'max:50'],
+            'group_type' => ['nullable', Rule::in(MetaParam::GROUP_TYPES)],
             'expression_string' => ['nullable', 'string'],
             'json_config' => ['nullable', 'array'],
             'display_field' => ['nullable', 'string', 'max:255'],
@@ -153,12 +155,41 @@ class MetaParamController extends Controller
             abort(response()->json(['message' => $problem, 'errors' => ['json_config' => [$problem]]], 422));
         }
 
+        // A formula (calculated field) must read and use only the form's fields and its details' lines.
+        // A query's columns keep SQL here instead (QueryDesign).
+        $formula = trim((string) ($data['expression_string'] ?? ''));
+        if ($formula !== '' && $owner->type?->code !== 'query' && ($problem = $this->formulaProblem($owner, $formula)) !== null) {
+            abort(response()->json(['message' => $problem, 'errors' => ['expression_string' => [$problem]]], 422));
+        }
+
         // A row can't reference the meta it belongs to (that would open the screen inside itself).
         if (! empty($data['ref_meta_id']) && (int) $data['ref_meta_id'] === $owner->id) {
             abort(422, 'ref_meta_id cannot point at the meta this row belongs to.');
         }
 
         return $data;
+    }
+
+    /**
+     * Why a formula can't be used on this meta, or null: it must read, and its names must be
+     * the meta's fields or its details with their lines' fields. A line form (some detail's
+     * ref_meta_id) may also use parent.field.
+     */
+    private function formulaProblem(Meta $owner, string $formula): ?string
+    {
+        $params = MetaParam::where('main_meta_id', $owner->id)->get(['field_path', 'data_type', 'ref_meta_id']);
+        $details = $params->where('data_type', 'detail')->whereNotNull('ref_meta_id')
+            ->mapWithKeys(fn (MetaParam $d) => [$d->field_path => MetaParam::where('main_meta_id', $d->ref_meta_id)->pluck('field_path')->all()])
+            ->all();
+        $line = MetaParam::where('data_type', 'detail')->where('ref_meta_id', $owner->id)->exists();
+
+        try {
+            Formula::check($formula, $params->pluck('field_path')->all(), $details, $line);
+        } catch (InvalidArgumentException $e) {
+            return $e->getMessage();
+        }
+
+        return null;
     }
 
     /** True if $candidateId is $ancestorId or sits anywhere below it. */

@@ -12,7 +12,7 @@ return [
      */
     'types' => [
         'app', 'calendar', 'chart', 'dashboard', 'datagrid', 'excel_import', 'form', 'gantt', 'get',
-        'matrix', 'page', 'report', 'statement', 'tabs', 'widget', 'workspace',
+        'matrix', 'menu_style', 'page', 'report', 'statement', 'tabs', 'widget', 'workspace',
     ],
 
     /*

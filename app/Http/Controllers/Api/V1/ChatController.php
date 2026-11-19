@@ -54,7 +54,7 @@ class ChatController extends Controller
     {
         $this->member($request, $chat);
         $before = (int) $request->integer('before');
-        $rows = $chat->messages()->with('user:id,name')->when($before > 0, fn ($q) => $q->where('id', '<', $before))
+        $rows = $chat->messages()->with('user:id,name,avatar')->when($before > 0, fn ($q) => $q->where('id', '<', $before))
             ->orderByDesc('id')->limit(self::PAGE)->get()->reverse()->values();
 
         return response()->json(['messages' => $rows->map(fn (ChatMessage $m) => $this->message($m)), 'more' => $rows->count() === self::PAGE]);
@@ -215,7 +215,7 @@ class ChatController extends Controller
         $q = trim((string) $request->query('q', ''));
         $people = User::inCurrentCustomer()->whereKeyNot($request->user()->id)
             ->when($q !== '', fn ($query) => $query->where(fn ($w) => $w->where('name', 'like', '%'.addcslashes($q, '%_\\').'%')->orWhere('email', 'like', '%'.addcslashes($q, '%_\\').'%')))
-            ->orderBy('name')->limit(20)->get(['id', 'name', 'email']);
+            ->orderBy('name')->limit(20)->get(['id', 'name', 'email', 'avatar']);
 
         return response()->json($people);
     }
@@ -227,7 +227,7 @@ class ChatController extends Controller
         if (mb_strlen($q) < 2) {
             return response()->json([]);
         }
-        $rows = ChatMessage::query()->with('user:id,name')->whereIn('kind', ['text', 'record'])
+        $rows = ChatMessage::query()->with('user:id,name,avatar')->whereIn('kind', ['text', 'record'])
             ->whereIn('chat_id', DB::table('chat_members')->where('user_id', $request->user()->id)->select('chat_id'))
             ->where(fn ($w) => $w->where('body', 'like', $like = '%'.addcslashes($q, '%_\\').'%')->orWhere('data', 'like', $like))
             ->orderByDesc('id')->limit(30)->get();
@@ -252,6 +252,7 @@ class ChatController extends Controller
             'chat_id' => $m->chat_id,
             'user_id' => $m->user_id,
             'user_name' => $m->user?->name,
+            'user_avatar' => $m->user?->avatar,
             'kind' => $m->kind,
             'body' => $m->body,
             'data' => $m->data,
@@ -279,13 +280,13 @@ class ChatController extends Controller
             ->select('chats.*', 'me.last_read_message_id as my_read')
             ->orderByRaw('COALESCE(chats.last_message_at, chats.created_at) DESC')
             ->limit(self::CHATS)
-            ->with('members:id,name')
+            ->with('members:id,name,avatar')
             ->get();
         if ($chats->isEmpty()) {
             return collect();
         }
         $ids = $chats->pluck('id');
-        $last = ChatMessage::query()->with('user:id,name')->whereIn('id', ChatMessage::query()->selectRaw('MAX(id)')->whereIn('chat_id', $ids)->groupBy('chat_id'))->get()->keyBy('chat_id');
+        $last = ChatMessage::query()->with('user:id,name,avatar')->whereIn('id', ChatMessage::query()->selectRaw('MAX(id)')->whereIn('chat_id', $ids)->groupBy('chat_id'))->get()->keyBy('chat_id');
         $unread = DB::table('chat_messages as m')
             ->join('chat_members as me', fn ($j) => $j->on('me.chat_id', '=', 'm.chat_id')->where('me.user_id', $user->id))
             ->whereIn('m.chat_id', $ids)->whereColumn('m.id', '>', 'me.last_read_message_id')
@@ -301,7 +302,9 @@ class ChatController extends Controller
                 'id' => $chat->id,
                 'type' => $chat->type,
                 'name' => $chat->type === Chat::GROUP ? $chat->name : ($others->first()->name ?? __('Just you')),
-                'members' => $chat->members->map(fn (User $m) => ['id' => $m->id, 'name' => $m->name])->values(),
+                // A direct chat shows the other person's photo; a group has none.
+                'avatar' => $chat->type === Chat::GROUP ? null : $others->first()?->avatar,
+                'members' => $chat->members->map(fn (User $m) => ['id' => $m->id, 'name' => $m->name, 'avatar' => $m->avatar])->values(),
                 'last' => $message ? $this->message($message) : null,
                 'unread' => (int) ($unread[$chat->id] ?? 0),
                 'typing' => $others->filter(fn (User $m) => $m->pivot->typing_at && Carbon::parse($m->pivot->typing_at)->gte($since))->pluck('name')->values(),
@@ -312,7 +315,7 @@ class ChatController extends Controller
     /** @return array{messages: Collection, typing: Collection, read: array<int, int>} */
     private function openState(Chat $chat, User $user, int $after): array
     {
-        $query = $chat->messages()->with('user:id,name');
+        $query = $chat->messages()->with('user:id,name,avatar');
         $rows = $after > 0
             ? $query->where('id', '>', $after)->orderBy('id')->limit(200)->get()
             : $query->orderByDesc('id')->limit(self::PAGE)->get()->reverse()->values();

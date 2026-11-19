@@ -33,7 +33,7 @@ class ParamRules
 
         foreach ($params as $param) {
             $column = $param->field_path;
-            if ($param->is_primary || in_array($column, self::MANAGED_COLUMNS, true) || in_array($column, $skip, true) || Autonumber::isLocked($param)) {
+            if ($param->is_primary || in_array($column, self::MANAGED_COLUMNS, true) || in_array($column, $skip, true) || Autonumber::isLocked($param) || Formula::of($param) !== null) {
                 continue;
             }
 

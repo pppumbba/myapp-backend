@@ -38,13 +38,17 @@ class Builders
         self::checkLinks($user, array_filter([$data['ref_meta_id'] ?? null, ...self::linkedIds($data['json_config'] ?? null)]), 'ref_meta_id');
     }
 
-    /** A param's columns and settings: no SQL expression, and links only to metas the builder may open. */
-    public static function checkParam(User $user, array $data): void
+    /**
+     * A param's columns and settings: no SQL expression, and links only to metas the builder may
+     * open. On other metas than queries expression_string is a formula (Formula), never SQL, so
+     * builders may set it.
+     */
+    public static function checkParam(User $user, array $data, ?Meta $owner = null): void
     {
         if ($user->isAdmin()) {
             return;
         }
-        if (! empty($data['expression_string'])) {
+        if (! empty($data['expression_string']) && (! $owner || $owner->type?->code === 'query')) {
             self::refuse('expression_string', __('Only administrators can set an expression.'));
         }
         self::checkLinks($user, array_filter([$data['ref_meta_id'] ?? null, ...self::linkedIds($data['json_config'] ?? null)]), 'ref_meta_id');

@@ -30,6 +30,9 @@ class MetaParam extends Model
     /** Where a column can sit on a record's widget. */
     public const WIDGET_POSITIONS = ['image', 'title', 'subtitle', 'badge', 'body', 'footer'];
 
+    /** How a field takes its value when a consolidate button merges records (Consolidate). */
+    public const GROUP_TYPES = ['group', 'sum', 'avg', 'min', 'max', 'count', 'concat', 'first', 'last'];
+
     protected $table = 'meta_params';
 
     protected $fillable = [
@@ -58,6 +61,7 @@ class MetaParam extends Model
         'min_value',
         'max_value',
         'column_width',
+        'group_type',
         'expression_string',
         'json_config',
         'display_field',

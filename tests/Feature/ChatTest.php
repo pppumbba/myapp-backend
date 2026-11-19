@@ -52,6 +52,23 @@ class ChatTest extends TestCase
         $this->as($bob)->getJson('/api/chats/poll')->assertJsonPath('unread', 1);
     }
 
+    public function test_chats_carry_peoples_photos(): void
+    {
+        $ann = User::factory()->create(['avatar' => '1-annAAAAAAAAAAAA.png']);
+        $bob = User::factory()->create(['name' => 'Bob', 'avatar' => '2-bobBBBBBBBBBBBB.jpg']);
+
+        $chatId = $this->as($ann)->postJson('/api/chats/direct', ['user_id' => $bob->id])
+            ->assertJsonPath('avatar', $bob->avatar)->json('id');
+        $this->as($ann)->postJson("/api/chats/{$chatId}/messages", ['body' => 'Hi'])->assertJsonPath('user_avatar', $ann->avatar);
+        $this->as($bob)->getJson("/api/chats/poll?open={$chatId}")
+            ->assertJsonPath('chats.0.avatar', $ann->avatar)
+            ->assertJsonPath('open.messages.0.user_avatar', $ann->avatar);
+        $this->as($ann)->getJson('/api/chats/people?q=Bob')->assertJsonPath('0.avatar', $bob->avatar);
+
+        $group = $this->as($ann)->postJson('/api/chats', ['name' => 'Team', 'user_ids' => [$bob->id]])->assertJsonPath('avatar', null);
+        $this->assertEqualsCanonicalizing([$ann->avatar, $bob->avatar], array_column($group->json('members'), 'avatar'));
+    }
+
     public function test_typing_shows_to_the_others_for_a_few_seconds(): void
     {
         [$ann, $bob] = User::factory()->count(2)->create();

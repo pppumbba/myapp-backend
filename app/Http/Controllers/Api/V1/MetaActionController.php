@@ -92,7 +92,7 @@ class MetaActionController extends Controller
     {
         $req = $partial ? 'sometimes' : 'required';
 
-        return $request->validate([
+        $data = $request->validate([
             'action' => [$req, Rule::in(MetaAction::ACTIONS)],
             'label' => [$req, 'string', 'max:255'],
             'icon_cls' => ['nullable', 'string', 'max:50'],
@@ -107,5 +107,12 @@ class MetaActionController extends Controller
             'json_config.params' => ['sometimes', 'array'],
             'json_config.params.*' => ['string', 'max:255'],
         ]);
+
+        // A consolidate button always works on picked rows.
+        if (($data['action'] ?? null) === 'consolidate') {
+            $data['needs_row'] = true;
+        }
+
+        return $data;
     }
 }

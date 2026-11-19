@@ -38,6 +38,14 @@ return [
             'report' => false,
         ],
 
+        // Profile pictures: users are shared by all customers, so this root never moves with one.
+        'avatars' => [
+            'driver' => 'local',
+            'root' => storage_path('app/avatars'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

@@ -38,6 +38,7 @@ class MetaTypeSeeder extends Seeder
             ['code' => 'website', 'name' => 'Website', 'description' => 'A public website: pages from the page builder with addresses, a menu, its own domains, publishing and visit counts.'],
             ['code' => 'screen', 'name' => 'Screen', 'description' => 'A built-in screen of the system, such as market contracts, placed in an app’s menu like any other meta.'],
             ['code' => 'structure', 'name' => 'Structure', 'description' => 'A database table: its params are the columns. Apply to database creates the table, then adds and changes columns.'],
+            ['code' => 'menu_style', 'name' => 'Menu style', 'description' => 'A look for an app’s side menu: background, edge, corners, gap, width and items. Made once, picked by any app.'],
         ];
 
         // meta_types has no timestamps, so upsert through the query builder. Safe to run again.

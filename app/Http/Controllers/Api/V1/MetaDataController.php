@@ -4,16 +4,19 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Meta;
+use App\Models\MetaAction;
 use App\Models\MetaParam;
 use App\Models\User;
 use App\Models\WfmStatus;
 use App\Support\Access;
 use App\Support\Autonumber;
+use App\Support\Consolidate;
 use App\Support\Contents;
 use App\Support\Criteria;
 use App\Support\Documents;
 use App\Support\ExternalService;
 use App\Support\FilterLookups;
+use App\Support\Formula;
 use App\Support\GridReuse;
 use App\Support\NamedSql;
 use App\Support\Notifier;
@@ -487,6 +490,50 @@ class MetaDataController extends Controller
     }
 
     /**
+     * POST /metas/{meta}/consolidate/{action}?filter[]=…&scope[]=… {ids: [...]}
+     * The record a consolidate button opens its form with: the picked rows of this grid (as
+     * the grid shows them to this user), or every row its get meta gives for each of them,
+     * merged by the form's group_type fields (Consolidate). Nothing is saved.
+     */
+    public function consolidate(Request $request, Meta $meta, MetaAction $action): JsonResponse
+    {
+        Access::requireRecords($request->user(), $meta);
+        abort_unless($action->grid_meta_id === $meta->id && $action->action === 'consolidate', 404);
+        $form = Meta::with('type')->find($action->form_meta_id);
+        abort_unless($form?->type?->code === 'form', 422, __('A consolidate button needs a form.'));
+        Access::require($request->user(), $form, 'create');
+        abort_if(ExternalService::uses($meta), 422, __('Records of an external service can\'t be consolidated.'));
+        $ids = $request->validate(['ids' => ['required', 'array', 'min:1', 'max:500'], 'ids.*' => ['required', 'string', 'max:64']])['ids'];
+
+        $source = $this->source($meta);
+        [$query, $missing] = $this->filtered($request, $meta, $source);
+        abort_if($query === null, 422, __('Fill in :fields first.', ['fields' => $missing->join(', ')]));
+        $found = $this->read(fn () => $query->whereIn($source['key'], $ids)->get())->keyBy(fn ($r) => (string) $r->{$source['key']});
+        // In the order they were picked.
+        $rows = collect($ids)->map(fn ($id) => $found->get((string) $id))->filter()->map(fn ($r) => (array) $r)->values()->all();
+        abort_if($rows === [], 404, __('The picked records were not found.'));
+
+        if ($action->get_meta_id) {
+            $get = Meta::with('type')->find($action->get_meta_id);
+            abort_unless($get?->type?->code === 'get', 422, __('Only get metas fill forms.'));
+            Access::require($request->user(), $get, 'view');
+            $sql = trim((string) $get->query_string);
+            abort_if($sql === '', 422, 'This get meta has no query yet.');
+            $map = $action->json_config['params'] ?? ['id' => $source['key']];
+            $rows = collect($rows)->flatMap(function (array $row) use ($sql, $map, $request) {
+                $params = array_map(fn ($field) => is_scalar($row[$field] ?? null) ? (string) $row[$field] : '', $map);
+                [$bound, $bindings] = NamedSql::bind($sql, NamedSql::builtins($request->user()) + $params);
+
+                return array_map(fn ($r) => (array) $r, $this->read(fn () => DB::select($bound, $bindings)));
+            })->all();
+        }
+
+        $target = $this->source($form, true);
+
+        return response()->json((object) Consolidate::merge($target['params'], $target['columns'], $this->details($form), $rows));
+    }
+
+    /**
      * GET /metas/{meta}/autonumber?values[field]=value
      * The numbers a new record of this form would get now, by field, without taking them.
      * values are the form's current values, which pick the format (e.g. book_type_id).
@@ -580,6 +627,7 @@ class MetaDataController extends Controller
         $all = $this->details($meta);
         $details = $this->applicable($all, $request);
         [$data, $lines] = $this->validated($request, $source, $details);
+        [$data, $lines] = Formula::apply($source['params'], $source['columns'], $all, $data, $lines);
         $files = Contents::validated($meta, $source['table'], $request->all(), $request->user(), null);
         $data += $this->timestamps($source['table'], true);
 
@@ -685,6 +733,7 @@ class MetaDataController extends Controller
         $all = $this->details($meta);
         $details = $this->applicable($all, $request, $before);
         [$data, $lines] = $this->validated($request, $source, $details, $id);
+        [$data, $lines] = Formula::apply($source['params'], $source['columns'], $all, $data, $lines, $before, $id);
         $files = Contents::validated($meta, $source['table'], $request->all(), $request->user(), $id);
         $data += $this->timestamps($source['table'], false);
 
