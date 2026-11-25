@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AccessController;
+use App\Http\Controllers\Api\V1\AppImageController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\AvatarController;
 use App\Http\Controllers\Api\V1\ChartController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\Api\V1\MetaActionController;
 use App\Http\Controllers\Api\V1\MetaController;
 use App\Http\Controllers\Api\V1\MetaCopyController;
 use App\Http\Controllers\Api\V1\MetaDataController;
+use App\Http\Controllers\Api\V1\MetaLibraryController;
 use App\Http\Controllers\Api\V1\MetaParamController;
 use App\Http\Controllers\Api\V1\MetaStructureController;
 use App\Http\Controllers\Api\V1\MetaTransferController;
@@ -56,6 +58,7 @@ use App\Http\Controllers\Api\V1\ScheduleController;
 use App\Http\Controllers\Api\V1\ScreenController;
 use App\Http\Controllers\Api\V1\SessionValueController;
 use App\Http\Controllers\Api\V1\SiteController;
+use App\Http\Controllers\Api\V1\SiteDeskController;
 use App\Http\Controllers\Api\V1\StageQueryController;
 use App\Http\Controllers\Api\V1\StructureController;
 use App\Http\Controllers\Api\V1\TagController;
@@ -77,6 +80,8 @@ Route::get('/contents/{content}', [ContentController::class, 'show'])->whereNumb
 
 // Profile pictures: an <img> sends no token, so open to anyone with the (random) name.
 Route::get('/avatars/{file}', [AvatarController::class, 'show'])->middleware('throttle:300,1');
+// Apps' pictures, the same way.
+Route::get('/app-images/{file}', [AppImageController::class, 'show'])->middleware('throttle:300,1');
 
 // The payment provider tells us an invoice changed; we ask the provider again rather than trust it.
 Route::match(['get', 'post'], '/market/payments/{payment}/callback', [PaymentController::class, 'callback'])->whereNumber('payment')->middleware('throttle:60,1');
@@ -102,6 +107,12 @@ Route::middleware(['auth:sanctum', 'customer:optional'])->group(function () {
 Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     Route::get('/meta-types', [MetaTypeController::class, 'index']);
     Route::get('/metas/options', [MetaController::class, 'options']);
+    Route::get('/metas/library', [MetaLibraryController::class, 'index']);
+    Route::put('/metas/{meta}/star', [MetaLibraryController::class, 'star']);
+    Route::delete('/metas/{meta}/star', [MetaLibraryController::class, 'unstar']);
+    Route::post('/metas/{meta}/viewed', [MetaLibraryController::class, 'viewed']);
+    Route::get('/metas/{meta}/shares', [MetaLibraryController::class, 'shares']);
+    Route::put('/metas/{meta}/shares', [MetaLibraryController::class, 'share']);
 
     // The market: verifying people (DAN) and the companies they act for (ХУР).
     Route::post('/market/dan/start', [DanController::class, 'start'])->middleware('throttle:login');
@@ -213,6 +224,9 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
     // A phone app's launcher icon (MobileController).
     Route::post('/metas/{meta}/mobile-icon', [MobileController::class, 'saveIcon'])->middleware('meta.version');
     Route::delete('/metas/{meta}/mobile-icon', [MobileController::class, 'deleteIcon'])->middleware('meta.version');
+    // An app's picture on its tile and card (AppImageController).
+    Route::post('/metas/{meta}/app-image', [AppImageController::class, 'store'])->middleware(['meta.version', 'throttle:20,1']);
+    Route::delete('/metas/{meta}/app-image', [AppImageController::class, 'destroy'])->middleware('meta.version');
     Route::get('/user/session', [SessionValueController::class, 'mine']);
     Route::post('/user/session/refresh', [SessionValueController::class, 'refresh']);
     Route::post('/session-values/test', [SessionValueController::class, 'test']);
@@ -354,6 +368,7 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
 
     // Version control: saved versions of a meta, comparing them and restoring one.
     Route::get('/meta-versions/deleted', [MetaVersionController::class, 'deleted']);
+    Route::delete('/meta-versions/deleted/{metaId}', [MetaVersionController::class, 'purge'])->whereNumber('metaId');
     Route::get('/metas/{meta}/versions', [MetaVersionController::class, 'index']);
     Route::post('/metas/{meta}/versions', [MetaVersionController::class, 'store']);
     Route::get('/meta-versions/{version}/diff', [MetaVersionController::class, 'diff']);
@@ -366,6 +381,12 @@ Route::middleware(['auth:sanctum', 'customer'])->group(function () {
 
     // Websites: pages from the page builder with addresses, domains, checks, publishing and visits (Sites).
     Route::get('/sites', [SiteController::class, 'index']);
+    // Across every website: the Website management app (SiteDeskController).
+    Route::get('/sites/overview', [SiteDeskController::class, 'overview']);
+    Route::get('/site-releases', [SiteDeskController::class, 'releases']);
+    Route::get('/site-domains', [SiteDeskController::class, 'domains']);
+    Route::get('/site-messages', [SiteDeskController::class, 'messages']);
+    Route::get('/site-visits', [SiteDeskController::class, 'visits']);
     Route::post('/sites', [SiteController::class, 'store']);
     Route::get('/sites/{meta}', [SiteController::class, 'show'])->whereNumber('meta');
     Route::put('/sites/{meta}', [SiteController::class, 'save'])->whereNumber('meta')->middleware('meta.version');

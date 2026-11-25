@@ -88,7 +88,7 @@ class Customers
     {
         $main = config('database.connections.main.database');
         DB::connection('customer')->statement("CREATE OR REPLACE VIEW `users` AS
-            SELECT u.`id`, u.`name`, u.`email`, u.`theme_mode`, u.`ui_size`, u.`locale`, u.`created_at`, u.`updated_at`
+            SELECT u.`id`, u.`name`, u.`email`, u.`avatar`, u.`theme_mode`, u.`ui_size`, u.`locale`, u.`created_at`, u.`updated_at`
             FROM `{$main}`.`users` u
             JOIN `{$main}`.`customer_users` cu ON cu.`user_id` = u.`id` AND cu.`customer_id` = ".(int) $customer->id);
     }

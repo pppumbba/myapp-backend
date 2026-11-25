@@ -46,6 +46,14 @@ return [
             'report' => false,
         ],
 
+        // Apps' own pictures (AppImageController).
+        'app-images' => [
+            'driver' => 'local',
+            'root' => storage_path('app/app-images'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

@@ -57,9 +57,9 @@ class RoleWorkspaceController extends Controller
         $statuses = WfmStatus::whereIn('workflow_meta_id', $workflows->pluck('id'))->orderBy('id')->get()->groupBy('workflow_meta_id');
 
         return response()->json([
-            'role' => $role->loadCount('users'),
+            'role' => $role->countPeople(),
             'is_admin_role' => $role->code === Role::ADMIN,
-            'users' => $role->users()->orderBy('name')->get(['users.id', 'name', 'email']),
+            'users' => $role->people(),
             'metas' => $metas->values(),
             'workflows' => $workflows->map(fn (Meta $w) => [
                 'id' => $w->id,
@@ -91,11 +91,11 @@ class RoleWorkspaceController extends Controller
         ]);
         abort_if($role->code === Role::ADMIN && $data['user_ids'] === [], 422, 'There has to be at least one administrator.');
 
-        $changes = $role->users()->sync($data['user_ids']);
+        $changes = $role->syncPeople($data['user_ids']);
         User::whereIn('id', [...$changes['attached'], ...$changes['detached']])->get()->each->forgetRoles();
-        RoleLog::users($role->id, array_map('intval', $changes['attached']), array_map('intval', $changes['detached']), $request->user());
+        RoleLog::users($role->id, $changes['attached'], $changes['detached'], $request->user());
 
-        return response()->json($role->users()->orderBy('name')->get(['users.id', 'name', 'email']));
+        return response()->json($role->people());
     }
 
     /**

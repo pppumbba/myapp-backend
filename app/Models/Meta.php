@@ -23,6 +23,8 @@ class Meta extends Model
     protected $fillable = [
         'code', 'name', 'label_name', 'is_active', 'is_log', 'is_public', 'is_open', 'created_by', 'updated_by',
         'ref_meta_id', 'description', 'table_name', 'query_string',
+        // An app's icon and cover pictures, as paths under storage/app (set only by AppImageController).
+        'image_path', 'cover_path',
         'json_config', 'type_id', 'widget_id',
         // A form's scripts: on load, on change, before and after save, and shared variables and functions.
         'load_expression_string', 'event_expression_string', 'before_save_expression_string',

@@ -39,7 +39,7 @@ class UserController extends Controller
 
         $admin = Role::where('code', Role::ADMIN)->first();
         $losesAdmin = $admin && $user->isAdmin() && ! in_array($admin->id, array_map('intval', $data['role_ids']), true);
-        abort_if($losesAdmin && $admin->users()->count() <= 1, 422, 'There has to be at least one administrator.');
+        abort_if($losesAdmin && $admin->userIds()->count() <= 1, 422, 'There has to be at least one administrator.');
 
         $changes = $user->roles()->sync($data['role_ids']);
         $user->forgetRoles();

@@ -26,6 +26,8 @@ class AccessController extends Controller
             'features' => $user?->features() ?? [],
             'build_types' => $user?->isAdmin() ? null : ($user?->isBuilder() ? config('builders.types') : []),
             'metas' => (object) Access::metaRules($user),
+            // Metas shared with a builder: they change them as if they had made them.
+            'shared_meta_ids' => $user?->isBuilder() ? $user->sharedMetaIds() : [],
         ]);
     }
 }

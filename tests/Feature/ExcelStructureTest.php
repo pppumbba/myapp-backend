@@ -93,12 +93,14 @@ class ExcelStructureTest extends TestCase
     public function test_a_value_that_doesnt_fit_its_type_stops_it_before_any_table_is_made(): void
     {
         $file = $this->upload();
+        // Built-in apps (Meta studio, User management) are metas the migrations make.
+        $metas = Meta::count();
         // Items aren't whole numbers; the message gives the row as Excel numbers it.
         $this->postJson("/api/excel-structure/{$file['token']}/create", [
             'skip_rows' => [0, 6], 'skip_columns' => [4], 'name' => 'Stock report', 'types' => [0 => 'integer'],
         ])->assertUnprocessable()->assertJsonPath('message', fn ($m) => str_contains($m, 'Row 4, "Item"'));
         $this->assertFalse(Schema::hasTable('xl_stock_report'));
-        $this->assertSame(0, Meta::count());
+        $this->assertSame($metas, Meta::count());
 
         // Only xl_ tables, and not one that exists.
         $this->postJson("/api/excel-structure/{$file['token']}/create", ['skip_rows' => [0, 6], 'name' => 'Stock', 'table' => 'users'])

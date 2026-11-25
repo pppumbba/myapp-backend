@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Meta;
 use App\Models\MetaParam;
 use App\Models\MetaPermission;
+use App\Models\MetaType;
 use App\Models\MetaVersion;
 use App\Models\Role;
 use App\Models\User;
@@ -96,13 +97,41 @@ class MetaVersionTest extends TestCase
         $paramCount = MetaParam::where('main_meta_id', $this->form->id)->count();
 
         $this->deleteJson("/api/metas/{$this->form->id}")->assertNoContent();
-        $deleted = $this->getJson('/api/meta-versions/deleted')->assertOk()->assertJsonPath('0.code', 'proc_request_form')->assertJsonPath('0.note', 'Before deleting')->json('0');
+        $deleted = $this->getJson('/api/meta-versions/deleted')->assertOk()->assertJsonPath('data.0.code', 'proc_request_form')->assertJsonPath('data.0.note', 'Before deleting')
+            ->assertJsonPath('data.0.type_id', $this->form->type_id)->assertJsonPath('total', 1)->json('data.0');
 
         $this->postJson("/api/meta-versions/{$deleted['id']}/restore")->assertOk();
 
         $this->assertSame('proc_request_form', Meta::find($this->form->id)?->code);
         $this->assertSame($paramCount, MetaParam::where('main_meta_id', $this->form->id)->count());
-        $this->getJson('/api/meta-versions/deleted')->assertJsonCount(0);
+        $this->getJson('/api/meta-versions/deleted')->assertJsonCount(0, 'data');
+    }
+
+    public function test_deleted_metas_come_20_at_a_time_and_filter(): void
+    {
+        $types = MetaType::pluck('id', 'code');
+        foreach (range(1, 22) as $i) {
+            $meta = Meta::create(['code' => "gone_{$i}", 'name' => "Gone {$i}", 'type_id' => $i <= 3 ? $types['datagrid'] : $types['form']]);
+            $this->deleteJson("/api/metas/{$meta->id}")->assertNoContent();
+        }
+
+        $first = $this->getJson('/api/meta-versions/deleted')->assertOk()->assertJsonCount(20, 'data')->assertJsonPath('total', 22)->assertJsonPath('has_more', true);
+        $this->assertSame(3, $first->json('type_counts.'.$types['datagrid']));
+        $this->getJson('/api/meta-versions/deleted?page=2')->assertJsonCount(2, 'data')->assertJsonPath('has_more', false);
+        $this->getJson('/api/meta-versions/deleted?type_id='.$types['datagrid'])->assertJsonPath('total', 3);
+        $this->getJson('/api/meta-versions/deleted?q=gone_17')->assertJsonPath('total', 1)->assertJsonPath('data.0.code', 'gone_17');
+    }
+
+    public function test_a_deleted_meta_can_be_deleted_permanently(): void
+    {
+        $this->deleteJson("/api/meta-versions/deleted/{$this->form->id}")->assertUnprocessable();
+
+        $this->deleteJson("/api/metas/{$this->form->id}")->assertNoContent();
+        $this->deleteJson("/api/meta-versions/deleted/{$this->form->id}")->assertOk();
+
+        $this->assertSame(0, MetaVersion::where('meta_id', $this->form->id)->count());
+        $this->getJson('/api/meta-versions/deleted')->assertJsonPath('total', 0);
+        $this->deleteJson("/api/meta-versions/deleted/{$this->form->id}")->assertNotFound();
     }
 
     public function test_rows_pointing_at_something_gone_are_left_out_and_reported(): void

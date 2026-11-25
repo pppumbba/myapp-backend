@@ -18,7 +18,7 @@ class RoleController extends Controller
     {
         Access::requireAdmin($request->user());
 
-        return response()->json(Role::withCount('users')->orderBy('name')->get());
+        return response()->json(Role::withPeopleCount()->orderBy('name')->get());
     }
 
     /** POST /roles */
@@ -26,7 +26,7 @@ class RoleController extends Controller
     {
         Access::requireAdmin($request->user());
 
-        return response()->json(Role::create($this->validated($request))->loadCount('users'), 201);
+        return response()->json(Role::create($this->validated($request))->countPeople(), 201);
     }
 
     /** PUT /roles/{role} */
@@ -40,7 +40,7 @@ class RoleController extends Controller
         $role->update($data);
         RoleLog::role($role->id, $before, $role->only(['code', 'name', 'description', 'features']), $request->user());
 
-        return response()->json($role->loadCount('users'));
+        return response()->json($role->countPeople());
     }
 
     /** DELETE /roles/{role}. Its permission rows and memberships go with it. */

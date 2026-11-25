@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class MetaController extends Controller
 {
@@ -179,6 +180,12 @@ class MetaController extends Controller
                 // Set by POST /metas/{meta}/mobile-icon; a save may only keep or clear it, never point elsewhere.
                 'json_config.mobile.icon' => ['nullable', 'string', 'regex:'.MobileController::ICON_FILE, Rule::in(array_filter([$current ? MobileController::iconFile($current) : null]))],
             ]);
+        }
+
+        // Once a meta has a type it keeps it: its parts, settings and saved records are made for that
+        // type. One with no type may be given one.
+        if ($current?->type_id && array_key_exists('type_id', $data) && (int) $data['type_id'] !== (int) $current->type_id) {
+            throw ValidationException::withMessages(['type_id' => __("A meta's type can't be changed once it is set.")]);
         }
 
         if (! empty($data['ref_meta_id']) && $current && (int) $data['ref_meta_id'] === $current->id) {

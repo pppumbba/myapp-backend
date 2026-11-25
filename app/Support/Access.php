@@ -38,7 +38,7 @@ class Access
         abort_unless($user?->isBuilder(), 403, __('Only builders can do this.'));
     }
 
-    /** Whether the user may change this meta and its parts: an admin, or the builder who made it. */
+    /** Whether the user may change this meta and its parts: an admin, or a builder who made it or it was shared with. */
     public static function designs(?User $user, Meta|int $meta): bool
     {
         return (bool) $user?->isAdmin() || self::owns($user, $meta);
@@ -50,7 +50,7 @@ class Access
         abort_unless(self::designs($user, $meta), 403, __('You can only change metas you made.'));
     }
 
-    /** Whether the user is a builder who made this meta: they may do everything with it. */
+    /** Whether the user is a builder who made this meta, or it was shared with: they may do everything with it. */
     public static function owns(?User $user, Meta|int $meta): bool
     {
         if (! $user?->isBuilder()) {
@@ -58,7 +58,7 @@ class Access
         }
         $createdBy = $meta instanceof Meta ? $meta->created_by : Meta::whereKey($meta)->value('created_by');
 
-        return $createdBy !== null && (int) $createdBy === $user->id;
+        return ($createdBy !== null && (int) $createdBy === $user->id) || in_array($meta instanceof Meta ? $meta->id : $meta, $user->sharedMetaIds(), true);
     }
 
     /** Whether the user may view, create, edit or delete through this meta. */
@@ -141,7 +141,7 @@ class Access
 
         return $query->where(fn ($q) => $q->where('metas.is_public', true)
             ->when($user, fn ($q) => $q->orWhere('metas.is_open', true))
-            ->when($user?->isBuilder(), fn ($q) => $q->orWhere('metas.created_by', $user->id))
+            ->when($user?->isBuilder(), fn ($q) => $q->orWhere('metas.created_by', $user->id)->orWhereIn('metas.id', $user->sharedMetaIds()))
             ->orWhereExists(fn ($p) => $p->from('meta_permissions')
                 ->whereColumn('meta_permissions.meta_id', 'metas.id')->whereIn('role_id', $roles)->where('can_view', true)));
     }
@@ -172,7 +172,7 @@ class Access
             }
         }
         if ($user?->isBuilder()) {
-            foreach (Meta::where('created_by', $user->id)->pluck('id') as $metaId) {
+            foreach (Meta::where('created_by', $user->id)->pluck('id')->merge($user->sharedMetaIds()) as $metaId) {
                 $rules[$metaId] = array_fill_keys(MetaPermission::ABILITIES, true);
             }
         }

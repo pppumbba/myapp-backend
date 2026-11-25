@@ -74,6 +74,18 @@ class User extends Authenticatable
             : array_values(array_intersect(Role::FEATURES, $this->roles()->pluck('features')->flatten()->unique()->all())));
     }
 
+    /**
+     * The metas others shared with the user (meta_shares, in the customer's schema): a builder
+     * may change them as if they had made them.
+     *
+     * @return list<int>
+     */
+    public function sharedMetaIds(): array
+    {
+        return $this->perRequest('shared_meta_ids', fn () => DB::connection('customer')->table('meta_shares')
+            ->where('user_id', $this->id)->pluck('meta_id')->map(fn ($id) => (int) $id)->all());
+    }
+
     /** Whether the user may make metas and change their own: a "build" or "studio" role, or an admin. */
     public function isBuilder(): bool
     {

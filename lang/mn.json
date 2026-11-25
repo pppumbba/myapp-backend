@@ -1,4 +1,9 @@
 {
+  "A meta can only be shared with admins and builders of this workspace.": "Метаг зөвхөн энэ ажлын орчны админ, бүтээгчидтэй хуваалцана.",
+  ":name shared :meta with you": ":name танд :meta-г хуваалцлаа",
+  "Only a deleted meta can be deleted permanently.": "Зөвхөн устгагдсан метаг бүрмөсөн устгана.",
+  "The picture must be between 64 and 8000 pixels on each side.": "Зургийн тал бүр 64-өөс 8000 пиксел байх ёстой.",
+  "Only apps have a picture.": "Зөвхөн апп зурагтай байна.",
   "Signing in with Google is not set up.": "Google-ээр нэвтрэх тохируулагдаагүй байна.",
   "The Google sign-in expired. Try again.": "Google-ээр нэвтрэх хугацаа дууссан. Дахин оролдоно уу.",
   "Google sign-in was cancelled.": "Google-ээр нэвтрэхийг цуцалсан.",
@@ -49,6 +54,7 @@
   "A list (like roleId) can only be compared with == or !=.": "Жагсаалтыг (roleId гэх мэт) зөвхөн == эсвэл != -ээр харьцуулна.",
   "A measure must count, sum, average, or take the lowest or highest value.": "Хэмжигдэхүүн тоолох, нийлбэр, дундаж, эсвэл хамгийн бага/их утгыг авах ёстой.",
   "A meta cannot reference itself.": "Мета өөр рүүгээ заах боломжгүй.",
+  "A meta's type can't be changed once it is set.": "Метаны төрлийг тохируулсны дараа өөрчлөх боломжгүй.",
   "A page cannot contain itself.": "Хуудас өөрийгөө агуулах боломжгүй.",
   "A page can’t become one of its own widgets.": "Хуудас өөрийнхөө виджет болж чадахгүй.",
   "A process flow step must be a form or a stage query.": "Процессын урсгалын алхам маягт эсвэл үе шатны асуулга байх ёстой.",

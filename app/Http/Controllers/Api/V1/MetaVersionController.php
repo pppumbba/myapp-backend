@@ -69,12 +69,67 @@ class MetaVersionController extends Controller
         return response()->json(MetaVersions::restore($version, $request->user()));
     }
 
-    /** GET /meta-versions/deleted: metas that are gone, each with its newest version. */
+    /** How many deleted metas a page of GET /meta-versions/deleted holds. */
+    private const DELETED_PAGE = 20;
+
+    /**
+     * GET /meta-versions/deleted?q=&type_id=&tag_ids=1,2&page=1: metas that are gone, newest first,
+     * each as its newest version with the type, description and tags it had (from the snapshot).
+     * A page holds 20; q matches name, code or who deleted it, and a meta must have every tag.
+     * type_counts and tag_counts are over every deleted meta, for the filters.
+     *
+     * @return JsonResponse {data, total, has_more, type_counts, tag_counts}
+     */
     public function deleted(Request $request): JsonResponse
     {
         Access::requireAdmin($request->user());
-        $newest = MetaVersion::query()->select(DB::raw('MAX(id)'))->whereNotIn('meta_id', Meta::query()->select('id'))->groupBy('meta_id');
+        $data = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'type_id' => ['nullable', 'integer'],
+            'tag_ids' => ['nullable', 'string', 'regex:/^\d+(,\d+)*$/'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
 
-        return response()->json(MetaVersion::whereIn('id', $newest)->with('creator:id,name')->orderByDesc('created_at')->get());
+        $newest = MetaVersion::query()->select(DB::raw('MAX(id)'))->whereNotIn('meta_id', Meta::query()->select('id'))->groupBy('meta_id');
+        $all = MetaVersion::whereIn('id', $newest)->with('creator:id,name')->orderByDesc('created_at')->orderByDesc('id')->get()
+            ->map(function (MetaVersion $v) {
+                $meta = $v->snapshot['meta'] ?? [];
+
+                return $v->toArray() + [
+                    'type_id' => isset($meta['type_id']) ? (int) $meta['type_id'] : null,
+                    'description' => $meta['description'] ?? null,
+                    'tag_ids' => array_values(array_map(fn (array $row) => (int) $row['tag_id'], $v->snapshot['parts']['tags'] ?? [])),
+                ];
+            });
+
+        $q = mb_strtolower(trim($data['q'] ?? ''));
+        $tagIds = isset($data['tag_ids']) ? array_map('intval', explode(',', $data['tag_ids'])) : [];
+        $shown = $all->filter(fn (array $v) => (empty($data['type_id']) || $v['type_id'] === (int) $data['type_id'])
+            && ! array_diff($tagIds, $v['tag_ids'])
+            && ($q === '' || collect([$v['name'], $v['code'], $v['creator']['name'] ?? ''])->contains(fn ($s) => str_contains(mb_strtolower((string) $s), $q))))->values();
+
+        $page = (int) ($data['page'] ?? 1);
+
+        return response()->json([
+            'data' => $shown->forPage($page, self::DELETED_PAGE)->values(),
+            'total' => $shown->count(),
+            'has_more' => $shown->count() > $page * self::DELETED_PAGE,
+            'type_counts' => (object) $all->whereNotNull('type_id')->countBy('type_id')->all(),
+            'tag_counts' => (object) $all->flatMap(fn (array $v) => $v['tag_ids'])->countBy()->all(),
+        ]);
+    }
+
+    /**
+     * DELETE /meta-versions/deleted/{metaId}: forgets a deleted meta for good, every version of
+     * it, so it can no longer be restored. A meta that still exists is refused.
+     */
+    public function purge(Request $request, int $metaId): JsonResponse
+    {
+        Access::requireAdmin($request->user());
+        abort_if(Meta::whereKey($metaId)->exists(), 422, __('Only a deleted meta can be deleted permanently.'));
+        $count = MetaVersion::where('meta_id', $metaId)->delete();
+        abort_if($count === 0, 404);
+
+        return response()->json(['deleted_versions' => $count]);
     }
 }
